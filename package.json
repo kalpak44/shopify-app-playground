@@ -1,0 +1,22 @@
+{
+  "name": "shopify-app-playground",
+  "version": "1.0.0",
+  "license": "MIT",
+  "scripts": {
+    "shopify": "shopify",
+    "build": "shopify app build",
+    "dev": "shopify app dev",
+    "info": "shopify app info",
+    "generate": "shopify app generate",
+    "deploy": "shopify app deploy"
+  },
+  "dependencies": {},
+  "trustedDependencies": [
+    "@shopify/plugin-cloudflare"
+  ],
+  "author": "pavel.usanli@gmail.com",
+  "private": true,
+  "workspaces": [
+    "extensions/*"
+  ]
+}
