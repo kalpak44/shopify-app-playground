@@ -3,15 +3,18 @@
 
 name = "theme-extension-playground"
 client_id = "aa2e8ef1ecccc3b3abdae1a3b8a77ae6"
-application_url = "https://shopify.dev/apps/default-app-home"
-embedded = false
+application_url = "https://example.com"
+embedded = true
 
 [auth]
-redirect_urls = [ "https://shopify.dev/apps/default-app-home" ]
+redirect_urls = [ "https://example.com/api/auth" ]
 
 [webhooks]
 api_version = "2025-10"
 
 [access_scopes]
-# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = ""
+scopes = "write_products"
+
+[build]
+include_config_on_deploy = true
+automatically_update_urls_on_dev = true
