@@ -21,75 +21,37 @@ const shopify = shopifyApp({
   },
   hooks: {
     afterAuth: async ({ admin }) => {
-      const definitions = [
-        {
-          name: "Product Metafield",
-          namespace: "custom",
-          key: "product_metafield",
-          type: "single_line_text_field",
-          ownerType: "PRODUCT",
-          pinnedPosition: 1,
-        },
-        {
-          name: "Product Attachment",
-          namespace: "custom",
-          key: "product_attachment",
-          type: "file_reference",
-          ownerType: "PRODUCT",
-          pinnedPosition: 2,
-        },
-      ];
-
-      for (const definition of definitions) {
-        const response = await admin.graphql(
-          `#graphql
-          mutation CreateMetafieldDefinition($definition: MetafieldDefinitionInput!) {
-            metafieldDefinitionCreate(definition: $definition) {
-              createdDefinition { id name }
-              userErrors { field message code }
-            }
-          }`,
-          { variables: { definition } }
-        );
-
-        const { data } = await response.json();
-        const errors = data?.metafieldDefinitionCreate?.userErrors ?? [];
-        const alreadyExists = errors.some((e) => e.code === "TAKEN");
-
-        if (alreadyExists) {
-          const pinResponse = await admin.graphql(
-            `#graphql
-            mutation PinMetafieldDefinition($key: String!, $namespace: String!, $pinnedPosition: Int!) {
-              metafieldDefinitionUpdate(definition: {
-                key: $key
-                namespace: $namespace
-                ownerType: PRODUCT
-                pinnedPosition: $pinnedPosition
-              }) {
-                updatedDefinition { id name pinnedPosition }
-                userErrors { field message }
-              }
-            }`,
-            {
-              variables: {
-                key: definition.key,
-                namespace: definition.namespace,
-                pinnedPosition: definition.pinnedPosition,
-              },
-            }
-          );
-          const pinData = await pinResponse.json();
-          const pinErrors = pinData?.data?.metafieldDefinitionUpdate?.userErrors ?? [];
-          if (pinErrors.length > 0) {
-            console.error(`[afterAuth] "${definition.name}" pin errors:`, pinErrors);
-          } else {
-            console.log(`[afterAuth] "${definition.name}" pinned at position ${definition.pinnedPosition}.`);
+      const response = await admin.graphql(
+        `#graphql
+        mutation CreateMetafieldDefinition($definition: MetafieldDefinitionInput!) {
+          metafieldDefinitionCreate(definition: $definition) {
+            createdDefinition { id name }
+            userErrors { field message code }
           }
-        } else if (errors.length > 0) {
-          console.error(`[afterAuth] "${definition.name}" errors:`, errors);
-        } else {
-          console.log(`[afterAuth] "${definition.name}" created:`, data?.metafieldDefinitionCreate?.createdDefinition?.id);
+        }`,
+        {
+          variables: {
+            definition: {
+              name: "Product Metafield",
+              namespace: "custom",
+              key: "product_metafield",
+              type: "single_line_text_field",
+              ownerType: "PRODUCT",
+              pinnedPosition: 1,
+            },
+          },
         }
+      );
+
+      const { data } = await response.json();
+      const errors = data?.metafieldDefinitionCreate?.userErrors ?? [];
+
+      if (errors.some((e) => e.code === "TAKEN")) {
+        console.log("[afterAuth] Metafield definition already exists.");
+      } else if (errors.length > 0) {
+        console.error("[afterAuth] Metafield definition errors:", errors);
+      } else {
+        console.log("[afterAuth] Metafield definition created:", data?.metafieldDefinitionCreate?.createdDefinition?.id);
       }
     },
   },
