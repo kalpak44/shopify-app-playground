@@ -21,47 +21,48 @@ const shopify = shopifyApp({
   },
   hooks: {
     afterAuth: async ({ admin }) => {
-      const response = await admin.graphql(
-        `#graphql
-        mutation CreateMetafieldDefinition($definition: MetafieldDefinitionInput!) {
-          metafieldDefinitionCreate(definition: $definition) {
-            createdDefinition {
-              id
-              name
-            }
-            userErrors {
-              field
-              message
-              code
-            }
-          }
-        }`,
+      const definitions = [
         {
-          variables: {
-            definition: {
-              name: "Product Metafield",
-              namespace: "custom",
-              key: "product_metafield",
-              type: "single_line_text_field",
-              ownerType: "PRODUCT",
-            },
-          },
-        }
-      );
+          name: "Product Metafield",
+          namespace: "custom",
+          key: "product_metafield",
+          type: "single_line_text_field",
+          ownerType: "PRODUCT",
+          pinnedPosition: 1,
+        },
+        {
+          name: "Product Attachment",
+          namespace: "custom",
+          key: "product_attachment",
+          type: "file_reference",
+          ownerType: "PRODUCT",
+          pinnedPosition: 2,
+        },
+      ];
 
-      const { data } = await response.json();
-      const errors = data?.metafieldDefinitionCreate?.userErrors ?? [];
-      const alreadyExists = errors.some((e) => e.code === "TAKEN");
-
-      if (alreadyExists) {
-        console.log("[afterAuth] Metafield definition already exists, skipping.");
-      } else if (errors.length > 0) {
-        console.error("[afterAuth] Metafield definition errors:", errors);
-      } else {
-        console.log(
-          "[afterAuth] Metafield definition created:",
-          data?.metafieldDefinitionCreate?.createdDefinition?.id
+      for (const definition of definitions) {
+        const response = await admin.graphql(
+          `#graphql
+          mutation CreateMetafieldDefinition($definition: MetafieldDefinitionInput!) {
+            metafieldDefinitionCreate(definition: $definition) {
+              createdDefinition { id name }
+              userErrors { field message code }
+            }
+          }`,
+          { variables: { definition } }
         );
+
+        const { data } = await response.json();
+        const errors = data?.metafieldDefinitionCreate?.userErrors ?? [];
+        const alreadyExists = errors.some((e) => e.code === "TAKEN");
+
+        if (alreadyExists) {
+          console.log(`[afterAuth] "${definition.name}" already exists, skipping.`);
+        } else if (errors.length > 0) {
+          console.error(`[afterAuth] "${definition.name}" errors:`, errors);
+        } else {
+          console.log(`[afterAuth] "${definition.name}" created:`, data?.metafieldDefinitionCreate?.createdDefinition?.id);
+        }
       }
     },
   },
