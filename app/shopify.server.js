@@ -57,7 +57,34 @@ const shopify = shopifyApp({
         const alreadyExists = errors.some((e) => e.code === "TAKEN");
 
         if (alreadyExists) {
-          console.log(`[afterAuth] "${definition.name}" already exists, skipping.`);
+          const pinResponse = await admin.graphql(
+            `#graphql
+            mutation PinMetafieldDefinition($key: String!, $namespace: String!, $pinnedPosition: Int!) {
+              metafieldDefinitionUpdate(definition: {
+                key: $key
+                namespace: $namespace
+                ownerType: PRODUCT
+                pinnedPosition: $pinnedPosition
+              }) {
+                updatedDefinition { id name pinnedPosition }
+                userErrors { field message }
+              }
+            }`,
+            {
+              variables: {
+                key: definition.key,
+                namespace: definition.namespace,
+                pinnedPosition: definition.pinnedPosition,
+              },
+            }
+          );
+          const pinData = await pinResponse.json();
+          const pinErrors = pinData?.data?.metafieldDefinitionUpdate?.userErrors ?? [];
+          if (pinErrors.length > 0) {
+            console.error(`[afterAuth] "${definition.name}" pin errors:`, pinErrors);
+          } else {
+            console.log(`[afterAuth] "${definition.name}" pinned at position ${definition.pinnedPosition}.`);
+          }
         } else if (errors.length > 0) {
           console.error(`[afterAuth] "${definition.name}" errors:`, errors);
         } else {
