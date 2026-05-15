@@ -9,6 +9,9 @@
 # Dependency directory
 node_modules
 
+# React Router generated types
+.react-router/
+
 # Test coverage directory
 coverage
 
