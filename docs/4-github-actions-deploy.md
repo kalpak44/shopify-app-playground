@@ -27,7 +27,13 @@ SHOPIFY_CLI_PARTNERS_TOKEN
 
 ## Where To Get `SHOPIFY_CLI_PARTNERS_TOKEN`
 
-In Shopify Partner Dashboard:
+From Shopify at:
+
+```text
+https://dev.shopify.com/
+```
+
+In the Shopify dashboard:
 
 1. Open `Settings`
 2. Open `CLI token`
