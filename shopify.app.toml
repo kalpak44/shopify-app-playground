@@ -1,7 +1,7 @@
 # This file stores configurations for your Shopify app.
 # It must exist at the root of your app.
 
-name = "theme-extension-playground"
+name = "shopify-app-playground"
 client_id = "aa2e8ef1ecccc3b3abdae1a3b8a77ae6"
 application_url = "https://shopify-app-playground.pavel-usanli.online"
 embedded = true
