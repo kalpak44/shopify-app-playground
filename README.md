@@ -89,5 +89,4 @@ Init app via:
   mv shopify-app-playground/* .
   mv shopify-app-playground/.* . 2>/dev/null
   rmdir shopify-app-playground
-
 ```

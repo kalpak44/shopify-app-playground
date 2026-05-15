@@ -31,3 +31,6 @@ extensions/*/dist
 # Ignore shopify files created during app dev
 .shopify/*
 .shopify.lock
+
+# Named Shopify app environment configs
+shopify.app.*.toml
