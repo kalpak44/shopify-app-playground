@@ -1,0 +1,14 @@
+{% if product.metafields.custom.product_metafield.value != blank %}
+<div class="product-metafield">
+  {{ product.metafields.custom.product_metafield.value }}
+</div>
+{% endif %}
+
+{% schema %}
+{
+  "name": "Product Metafield",
+  "target": "section",
+  "templates": ["product"],
+  "settings": []
+}
+{% endschema %}
