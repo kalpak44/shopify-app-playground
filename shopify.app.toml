@@ -22,6 +22,3 @@ scopes = "write_products"
 [build]
 include_config_on_deploy = true
 automatically_update_urls_on_dev = false
-
-[branding]
-icon = "assets/app-icon.png"
