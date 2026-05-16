@@ -8,7 +8,6 @@
 
 # Dependency directory
 node_modules
-package-lock.json
 
 # React Router generated types
 .react-router/
