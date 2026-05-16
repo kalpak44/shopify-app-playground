@@ -85,7 +85,7 @@ Depending on the Shopify UI, this may appear as:
 Once the project is linked, commands like these should work:
 
 ```shell
-shopify app generate extension --template theme_app_extension --name hello-world-theme --path .
+shopify app generate extension --template theme_app_extension --name theme-extensions --path .
 shopify app dev
 shopify app deploy
 ```
@@ -95,6 +95,6 @@ shopify app deploy
 ```shell
 shopify auth login
 shopify app config link
-shopify app generate extension --template theme_app_extension --name hello-world-theme --path .
+shopify app generate extension --template theme_app_extension --name theme-extensions --path .
 shopify app dev
 ```

@@ -86,7 +86,7 @@ shopify auth login
 shopify app config link
 shopify app config link
 shopify app config use dev
-shopify app generate extension --template theme_app_extension --name hello-world-theme --path .
+shopify app generate extension --template theme_app_extension --name theme-extensions --path .
 shopify app dev --config dev
 ```
 
