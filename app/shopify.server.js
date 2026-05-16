@@ -19,42 +19,6 @@ const shopify = shopifyApp({
   future: {
     expiringOfflineAccessTokens: true,
   },
-  hooks: {
-    afterAuth: async ({ admin }) => {
-      const response = await admin.graphql(
-        `#graphql
-        mutation CreateMetafieldDefinition($definition: MetafieldDefinitionInput!) {
-          metafieldDefinitionCreate(definition: $definition) {
-            createdDefinition { id name }
-            userErrors { field message code }
-          }
-        }`,
-        {
-          variables: {
-            definition: {
-              name: "Product Metafield",
-              namespace: "custom",
-              key: "product_metafield",
-              type: "single_line_text_field",
-              ownerType: "PRODUCT",
-              pinnedPosition: 1,
-            },
-          },
-        }
-      );
-
-      const { data } = await response.json();
-      const errors = data?.metafieldDefinitionCreate?.userErrors ?? [];
-
-      if (errors.some((e) => e.code === "TAKEN")) {
-        console.log("[afterAuth] Metafield definition already exists.");
-      } else if (errors.length > 0) {
-        console.error("[afterAuth] Metafield definition errors:", errors);
-      } else {
-        console.log("[afterAuth] Metafield definition created:", data?.metafieldDefinitionCreate?.createdDefinition?.id);
-      }
-    },
-  },
   ...(process.env.SHOP_CUSTOM_DOMAIN
     ? { customShopDomains: [process.env.SHOP_CUSTOM_DOMAIN] }
     : {}),
