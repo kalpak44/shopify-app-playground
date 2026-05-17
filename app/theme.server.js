@@ -14,29 +14,6 @@ const GET_THEMES_QUERY = `#graphql
   }
 `;
 
-const GET_THEME_FILE_QUERY = `#graphql
-  query GetThemeFile($themeId: ID!) {
-    theme(id: $themeId) {
-      files(filenames: ["templates/index.json"]) {
-        edges {
-          node {
-            filename
-            body {
-              ... on OnlineStoreThemeFileBodyText {
-                content
-              }
-            }
-          }
-        }
-        userErrors {
-          code
-          filename
-        }
-      }
-    }
-  }
-`;
-
 const UPSERT_THEME_FILE_MUTATION = `#graphql
   mutation ThemeFilesUpsert($themeId: ID!, $files: [OnlineStoreThemeFilesUpsertFileInput!]!) {
     themeFilesUpsert(themeId: $themeId, files: $files) {
@@ -70,12 +47,7 @@ export async function getMainTheme(admin) {
 }
 
 export async function readThemeFile(admin, themeId, path) {
-  if (!ALLOWED_FILES.has(path)) {
-    throw new Error(`Reading "${path}" is not supported in this version.`);
-  }
-
-  // Build a dynamic query with the actual filename inline so we can
-  // stay within the allowed-files guard without template injection.
+  // Build a dynamic query with the actual filename inline.
   const query = `#graphql
     query GetThemeFile($themeId: ID!) {
       theme(id: $themeId) {

@@ -351,6 +351,7 @@ export default function ThemeAssistantSession() {
   const [isSending, setIsSending] = useState(false);
   const [pendingUserMessage, setPendingUserMessage] = useState(null);
   const [streamingText, setStreamingText] = useState(null);
+  const [statusText, setStatusText] = useState(null);
 
   const textareaRef = useRef(null);
   const scrollRef = useRef(null);
@@ -414,8 +415,12 @@ export default function ThemeAssistantSession() {
           try {
             const evt = JSON.parse(line.slice(6));
             if (evt.type === "chunk") {
+              setStatusText(null);
               setStreamingText((t) => t + evt.text);
+            } else if (evt.type === "status") {
+              setStatusText(evt.text);
             } else if (evt.type === "done") {
+              setStatusText(null);
               setIsSending(false);
               waitingRevalidateRef.current = true;
               revalidator.revalidate();
@@ -560,7 +565,7 @@ export default function ThemeAssistantSession() {
                   )}
 
                   {/* Streaming assistant reply */}
-                  {streamingText !== null && (
+                  {(streamingText !== null || statusText !== null) && (
                     <div style={{ display: "flex", justifyContent: "flex-start" }}>
                       <div
                         style={{
@@ -573,6 +578,11 @@ export default function ThemeAssistantSession() {
                           lineHeight: "1.55",
                         }}
                       >
+                        {statusText && !streamingText && (
+                          <span style={{ fontSize: "12px", color: "#8c9196", fontStyle: "italic" }}>
+                            {statusText}
+                          </span>
+                        )}
                         {streamingText}
                         {isSending && (
                           <span
