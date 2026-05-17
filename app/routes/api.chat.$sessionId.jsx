@@ -22,6 +22,13 @@ export const action = async ({ request, params }) => {
   const { accessToken } = session;
   const { sessionId } = params;
 
+  console.log(`[chat/${sessionId}] session resolved — shop: ${shop}, hasToken: ${!!accessToken}, scope: ${session.scope}`);
+
+  if (!shop || !accessToken) {
+    console.error(`[chat/${sessionId}] session missing shop or accessToken — aborting`);
+    return new Response("Unauthorized", { status: 401 });
+  }
+
   const chatSession = await prisma.themeChangeSession.findFirst({
     where: { id: sessionId, shop },
   });
@@ -64,6 +71,7 @@ export const action = async ({ request, params }) => {
       };
 
       const executeTool = async (name, args) => {
+        console.log(`[chat/${sessionId}] tool →`, name, JSON.stringify(args).slice(0, 120));
         if (name === "get_active_theme") {
           const theme = await getTheme();
           return { id: theme.id, name: theme.name };
