@@ -1,9 +1,12 @@
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { generateProposal } from "../proposal.server";
+import { streamAIReply } from "../ai.server";
+
+const NO_CONFIG_MSG =
+  "No AI provider configured. Please go to Settings and add your API token.";
 
 export const action = async ({ request, params }) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const shop = session.shop;
   const { sessionId } = params;
 
@@ -20,54 +23,58 @@ export const action = async ({ request, params }) => {
     return new Response("Bad request", { status: 400 });
   }
 
-  // Persist user message immediately
+  // Persist user message first so it's included in the history we pass to the AI
   await prisma.themeChangeMessage.create({
     data: { sessionId, role: "user", content },
   });
 
-  // Generate full reply (may call Shopify theme API)
-  const result = await generateProposal(admin, content);
-
-  let replyText;
-  if (result.type === "proposal") {
-    await prisma.themeChangeProposal.create({
-      data: {
-        sessionId,
-        shop,
-        themeId: result.themeId,
-        status: "pending",
-        summary: result.summary,
-        files: result.files,
-      },
-    });
-    replyText = `I've reviewed your active theme "${result.themeName}" and prepared a proposal. Please review the diff below and approve or reject the change.`;
-  } else {
-    replyText = result.message;
-  }
+  // Load AI config and conversation history in parallel
+  const [config, history] = await Promise.all([
+    prisma.themeAssistantConfig.findUnique({ where: { shop } }),
+    prisma.themeChangeMessage.findMany({
+      where: { sessionId },
+      orderBy: { createdAt: "asc" },
+      take: 40,
+    }),
+  ]);
 
   const encoder = new TextEncoder();
   let cancelled = false;
 
   const body = new ReadableStream({
     async start(controller) {
-      // Stream reply character by character to simulate typing
-      for (const char of replyText) {
-        if (cancelled) break;
-        controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify({ type: "chunk", text: char })}\n\n`)
-        );
-        await new Promise((r) => setTimeout(r, 22));
+      const send = (evt) =>
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(evt)}\n\n`));
+
+      let fullText = "";
+
+      if (!config?.apiToken) {
+        // No config — stream the friendly error character by character
+        for (const char of NO_CONFIG_MSG) {
+          if (cancelled) break;
+          send({ type: "chunk", text: char });
+          await new Promise((r) => setTimeout(r, 20));
+        }
+        fullText = NO_CONFIG_MSG;
+      } else {
+        try {
+          fullText = await streamAIReply({
+            config,
+            history,
+            onChunk: (text) => send({ type: "chunk", text }),
+            isCancelled: () => cancelled,
+          });
+        } catch (err) {
+          fullText = `Error: ${err.message}`;
+          send({ type: "chunk", text: fullText });
+        }
       }
 
-      if (!cancelled) {
-        // Persist assistant message only after full text is streamed
-        await prisma.themeChangeMessage.create({
-          data: { sessionId, role: "assistant", content: replyText },
-        });
-        controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify({ type: "done" })}\n\n`)
-        );
-      }
+      await prisma.themeChangeMessage.create({
+        data: { sessionId, role: "assistant", content: fullText },
+      });
+
+      send({ type: "done" });
       controller.close();
     },
     cancel() {
