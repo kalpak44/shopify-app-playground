@@ -2,9 +2,11 @@ import {
   redirect,
   useLoaderData,
   useNavigation,
+  useRouteError,
   Form,
   useActionData,
 } from "react-router";
+import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
@@ -600,3 +602,11 @@ export default function ThemeAssistantSession() {
     </AppProvider>
   );
 }
+
+export function ErrorBoundary() {
+  return boundary.error(useRouteError());
+}
+
+export const headers = (headersArgs) => {
+  return boundary.headers(headersArgs);
+};

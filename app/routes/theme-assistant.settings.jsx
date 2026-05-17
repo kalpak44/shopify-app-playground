@@ -1,4 +1,5 @@
-import { useLoaderData, useActionData, useNavigation, Form } from "react-router";
+import { useLoaderData, useActionData, useNavigation, useRouteError, Form } from "react-router";
+import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
@@ -243,3 +244,11 @@ export default function ThemeAssistantSettings() {
     </AppProvider>
   );
 }
+
+export function ErrorBoundary() {
+  return boundary.error(useRouteError());
+}
+
+export const headers = (headersArgs) => {
+  return boundary.headers(headersArgs);
+};
