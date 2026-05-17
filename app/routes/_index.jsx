@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from "react";
-import { redirect, useLoaderData, useRouteError, Form } from "react-router";
+import { useState } from "react";
+import { redirect, useLoaderData, useRouteError, Form, Link } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { authenticate } from "../shopify.server";
@@ -10,15 +10,12 @@ import prisma from "../db.server";
 export const loader = async ({ request }) => {
   try {
     const { session } = await authenticate.admin(request);
-    const shop = session.shop;
-
     const sessions = await prisma.themeChangeSession.findMany({
-      where: { shop },
+      where: { shop: session.shop },
       orderBy: { createdAt: "desc" },
       take: 50,
       select: { id: true, title: true, createdAt: true },
     });
-
     return { apiKey: process.env.SHOPIFY_API_KEY || "", sessions };
   } catch (error) {
     if (error instanceof Response && error.status === 410) {
@@ -56,170 +53,55 @@ export const action = async ({ request }) => {
   return null;
 };
 
-// ─── Delete confirmation dialog ───────────────────────────────────────────────
-
-// Uses the native <dialog> element so it renders in the browser's top layer —
-// bypasses any stacking context created by AppProvider or AppBridge.
-function DeleteDialog({ session, onClose }) {
-  const ref = useRef(null);
-
-  useEffect(() => {
-    ref.current?.showModal();
-  }, []);
-
-  return (
-    <dialog
-      ref={ref}
-      onClose={onClose}
-      onClick={(e) => { if (e.target === ref.current) ref.current.close(); }}
-      style={{
-        border: "none",
-        borderRadius: "12px",
-        padding: 0,
-        width: "420px",
-        maxWidth: "calc(100vw - 32px)",
-        boxShadow: "0 4px 20px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.08)",
-        fontFamily: "Inter, sans-serif",
-      }}
-    >
-      {/* polaris-style: pseudo-backdrop via ::backdrop isn't styleable inline,
-          but the native backdrop is fine for an embedded app */}
-      <div style={{ padding: "24px" }}>
-        <p
-          style={{
-            margin: "0 0 4px",
-            fontSize: "16px",
-            fontWeight: 650,
-            color: "#202223",
-          }}
-        >
-          Remove session?
-        </p>
-        <p
-          style={{
-            margin: "0 0 20px",
-            fontSize: "14px",
-            color: "#6d7175",
-            lineHeight: 1.55,
-          }}
-        >
-          <strong style={{ color: "#202223", fontWeight: 600 }}>
-            {session.title || "Untitled session"}
-          </strong>{" "}
-          and all its messages and proposals will be permanently deleted.
-        </p>
-
-        <div
-          style={{
-            borderTop: "1px solid #e1e3e5",
-            paddingTop: "16px",
-            display: "flex",
-            justifyContent: "flex-end",
-            gap: "8px",
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => ref.current?.close()}
-            style={{
-              padding: "8px 16px",
-              background: "#fff",
-              color: "#202223",
-              border: "1px solid #c9cccf",
-              borderRadius: "6px",
-              fontWeight: 500,
-              fontSize: "14px",
-              cursor: "pointer",
-              fontFamily: "inherit",
-            }}
-          >
-            Cancel
-          </button>
-          <Form method="post">
-            <input type="hidden" name="intent" value="delete_session" />
-            <input type="hidden" name="sessionId" value={session.id} />
-            <button
-              type="submit"
-              style={{
-                padding: "8px 16px",
-                background: "#d72c0d",
-                color: "#fff",
-                border: "1px solid #b3200a",
-                borderRadius: "6px",
-                fontWeight: 600,
-                fontSize: "14px",
-                cursor: "pointer",
-                fontFamily: "inherit",
-              }}
-            >
-              Delete
-            </button>
-          </Form>
-        </div>
-      </div>
-    </dialog>
-  );
-}
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function Index() {
   const { apiKey, sessions } = useLoaderData();
-  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [confirmId, setConfirmId] = useState(null);
 
   return (
     <AppProvider embedded apiKey={apiKey}>
       <div style={{ padding: "32px 40px", fontFamily: "Inter, sans-serif" }}>
-        {/* Header */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: "32px",
-          }}
-        >
+
+        {/* ── Header ── */}
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "28px" }}>
           <div>
-            <h1 style={{ fontSize: "22px", fontWeight: 650, margin: "0 0 4px", color: "#202223" }}>
+            <h1 style={{ margin: "0 0 4px", fontSize: "20px", fontWeight: 650, color: "#202223" }}>
               Theme Assistant
             </h1>
-            <p style={{ fontSize: "14px", color: "#6d7175", margin: 0 }}>
-              Chat with the assistant to propose and apply changes to your active theme.
+            <p style={{ margin: 0, fontSize: "14px", color: "#6d7175" }}>
+              Propose and apply changes to your active Shopify theme.
             </p>
           </div>
-          <div style={{ display: "flex", gap: "8px" }}>
-            <a
-              href="/theme-assistant/settings"
+          <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
+            <Link
+              to="/theme-assistant/settings"
               style={{
-                padding: "8px 16px",
-                background: "#fff",
+                padding: "8px 14px",
+                fontSize: "14px",
+                fontWeight: 500,
                 color: "#202223",
+                background: "#fff",
                 border: "1px solid #c9cccf",
                 borderRadius: "6px",
-                fontWeight: 500,
-                fontSize: "14px",
                 textDecoration: "none",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
               }}
             >
               Settings
-            </a>
+            </Link>
             <Form method="post">
               <input type="hidden" name="intent" value="new_session" />
               <button
                 type="submit"
                 style={{
-                  padding: "8px 16px",
-                  background: "#008060",
+                  padding: "8px 14px",
+                  fontSize: "14px",
+                  fontWeight: 600,
                   color: "#fff",
+                  background: "#008060",
                   border: "1px solid #006e52",
                   borderRadius: "6px",
-                  fontWeight: 600,
-                  fontSize: "14px",
                   cursor: "pointer",
-                  whiteSpace: "nowrap",
                   fontFamily: "inherit",
                 }}
               >
@@ -229,111 +111,134 @@ export default function Index() {
           </div>
         </div>
 
-        {/* Sessions list */}
+        {/* ── Session list ── */}
         {sessions.length === 0 ? (
-          <div
-            style={{
-              padding: "40px 20px",
-              textAlign: "center",
-              border: "1px dashed #c9cccf",
-              borderRadius: "8px",
-              color: "#6d7175",
-              fontSize: "14px",
-            }}
-          >
-            No sessions yet. Click <strong>New session</strong> to get started.
+          <div style={{
+            padding: "48px 24px",
+            textAlign: "center",
+            border: "1px dashed #c9cccf",
+            borderRadius: "8px",
+            color: "#6d7175",
+            fontSize: "14px",
+          }}>
+            No sessions yet — click <strong>New session</strong> to get started.
           </div>
         ) : (
-          <div
-            style={{
-              border: "1px solid #e1e3e5",
-              borderRadius: "8px",
-              overflow: "hidden",
-              background: "#fff",
-            }}
-          >
+          <div style={{ border: "1px solid #e1e3e5", borderRadius: "8px", overflow: "hidden" }}>
             {sessions.map((s, i) => (
               <div
                 key={s.id}
                 style={{
-                  display: "flex",
-                  alignItems: "center",
-                  borderTop: i === 0 ? "none" : "1px solid #e1e3e5",
+                  background: "#fff",
+                  borderTop: i > 0 ? "1px solid #e1e3e5" : "none",
                 }}
               >
-                <a
-                  href={`/theme-assistant/${s.id}`}
-                  style={{
-                    flex: 1,
+                {confirmId === s.id ? (
+                  /* ── Inline delete confirmation ── */
+                  <div style={{
                     display: "flex",
                     alignItems: "center",
                     gap: "12px",
-                    padding: "14px 16px",
-                    textDecoration: "none",
-                    color: "inherit",
-                    minWidth: 0,
-                  }}
-                >
-                  <span
-                    style={{
-                      flex: 1,
-                      fontWeight: 500,
-                      fontSize: "14px",
-                      color: "#202223",
-                      minWidth: 0,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {s.title || "Untitled session"}
-                  </span>
-                  <span style={{ fontSize: "13px", color: "#8c9196", whiteSpace: "nowrap" }}>
-                    {new Date(s.createdAt).toLocaleDateString()}
-                  </span>
-                </a>
-                <button
-                  type="button"
-                  onClick={() => setDeleteTarget(s)}
-                  title="Delete session"
-                  style={{
-                    margin: "0 12px",
-                    padding: "6px 10px",
-                    background: "transparent",
-                    color: "#8c9196",
-                    border: "1px solid transparent",
-                    borderRadius: "6px",
-                    cursor: "pointer",
-                    fontSize: "14px",
-                    fontFamily: "inherit",
-                    flexShrink: 0,
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.color = "#d72c0d";
-                    e.currentTarget.style.borderColor = "#fac8c3";
-                    e.currentTarget.style.background = "#fff4f4";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.color = "#8c9196";
-                    e.currentTarget.style.borderColor = "transparent";
-                    e.currentTarget.style.background = "transparent";
-                  }}
-                >
-                  Delete
-                </button>
+                    padding: "12px 16px",
+                    background: "#fff4f4",
+                  }}>
+                    <span style={{ flex: 1, fontSize: "14px", color: "#202223" }}>
+                      Delete <strong>{s.title || "Untitled session"}</strong>? This cannot be undone.
+                    </span>
+                    <Form method="post">
+                      <input type="hidden" name="intent" value="delete_session" />
+                      <input type="hidden" name="sessionId" value={s.id} />
+                      <button
+                        type="submit"
+                        style={{
+                          padding: "6px 14px",
+                          fontSize: "13px",
+                          fontWeight: 600,
+                          color: "#fff",
+                          background: "#d72c0d",
+                          border: "1px solid #b3200a",
+                          borderRadius: "6px",
+                          cursor: "pointer",
+                          fontFamily: "inherit",
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </Form>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmId(null)}
+                      style={{
+                        padding: "6px 14px",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#202223",
+                        background: "#fff",
+                        border: "1px solid #c9cccf",
+                        borderRadius: "6px",
+                        cursor: "pointer",
+                        fontFamily: "inherit",
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  /* ── Normal row ── */
+                  <div style={{ display: "flex", alignItems: "center" }}>
+                    <Link
+                      to={`/theme-assistant/${s.id}`}
+                      style={{
+                        flex: 1,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "12px",
+                        padding: "14px 16px",
+                        textDecoration: "none",
+                        color: "inherit",
+                        minWidth: 0,
+                      }}
+                    >
+                      <span style={{
+                        flex: 1,
+                        fontSize: "14px",
+                        fontWeight: 500,
+                        color: "#202223",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}>
+                        {s.title || "Untitled session"}
+                      </span>
+                      <span style={{ fontSize: "13px", color: "#8c9196", whiteSpace: "nowrap" }}>
+                        {new Date(s.createdAt).toLocaleDateString()}
+                      </span>
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmId(s.id)}
+                      style={{
+                        margin: "0 12px",
+                        padding: "6px 12px",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#6d7175",
+                        background: "transparent",
+                        border: "1px solid transparent",
+                        borderRadius: "6px",
+                        cursor: "pointer",
+                        fontFamily: "inherit",
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
         )}
       </div>
-
-      {/* Native dialog — renders in the top layer, always above AppProvider */}
-      {deleteTarget && (
-        <DeleteDialog
-          session={deleteTarget}
-          onClose={() => setDeleteTarget(null)}
-        />
-      )}
     </AppProvider>
   );
 }
