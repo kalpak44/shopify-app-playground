@@ -1,6 +1,6 @@
 const API_VERSION = "2025-10";
 
-async function shopifyGraphql(shop, accessToken, query, variables = {}) {
+export async function shopifyGraphql(shop, accessToken, query, variables = {}) {
   const response = await fetch(
     `https://${shop}/admin/api/${API_VERSION}/graphql.json`,
     {

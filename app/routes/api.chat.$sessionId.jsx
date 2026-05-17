@@ -1,7 +1,7 @@
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { runAgentLoop } from "../ai.server";
-import { getMainTheme, readThemeFile, listThemeFiles } from "../theme.server";
+import { getMainTheme, readThemeFile, listThemeFiles, shopifyGraphql } from "../theme.server";
 import { generateUnifiedDiff } from "../diff.server";
 
 const NO_CONFIG_MSG =
@@ -12,6 +12,8 @@ const TOOL_STATUS = {
   list_theme_files: "Listing theme files…",
   read_theme_file: "Reading theme file…",
   propose_file_change: "Creating proposal…",
+  shopify_graphql_query: "Querying store data…",
+  shopify_graphql_mutation: "Applying change…",
 };
 
 export const action = async ({ request, params }) => {
@@ -109,6 +111,18 @@ export const action = async ({ request, params }) => {
             success: true,
             message: "Proposal created and shown to the merchant for review.",
           };
+        }
+
+        if (name === "shopify_graphql_query") {
+          const { data, errors } = await shopifyGraphql(shop, accessToken, args.query, args.variables ?? {});
+          if (errors?.length) return { error: errors.map((e) => e.message).join(", ") };
+          return data;
+        }
+
+        if (name === "shopify_graphql_mutation") {
+          const { data, errors } = await shopifyGraphql(shop, accessToken, args.mutation, args.variables ?? {});
+          if (errors?.length) return { error: errors.map((e) => e.message).join(", ") };
+          return data;
         }
 
         return { error: `Unknown tool: ${name}` };

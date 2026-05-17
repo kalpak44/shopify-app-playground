@@ -1,31 +1,31 @@
 function buildSystemPrompt(scopes) {
   const scopeList = (scopes ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-  // write_themes implies read access in Shopify's permission model
-  const canRead  = scopeList.length === 0 || scopeList.includes("read_themes") || scopeList.includes("write_themes");
-  const canWrite = scopeList.length === 0 || scopeList.includes("write_themes");
+  const has = (...ss) => scopeList.length === 0 || ss.some((s) => scopeList.includes(s));
 
-  const permLines = [
+  // write_* implies read_* in Shopify's permission model
+  const canReadThemes  = has("read_themes", "write_themes");
+  const canWriteThemes = has("write_themes");
+
+  const permissionNotes = [
     `Granted OAuth scopes: ${scopeList.length ? scopeList.join(", ") : "unknown (assume full access)"}`,
-    !canRead  && "⚠️ read_themes is NOT granted — do not attempt to list or read theme files. Inform the merchant and suggest they check the app's permissions in the Shopify Partner dashboard.",
-    !canWrite && "⚠️ write_themes is NOT granted — do not propose file changes. Instead guide the merchant to apply changes manually via the Theme Editor (Online Store → Themes → Edit code) or the Shopify CLI (`shopify theme push`).",
+    !canReadThemes  && "⚠️ Theme read access not granted — do not attempt to list or read theme files.",
+    !canWriteThemes && "⚠️ Theme write access not granted — do not propose theme file changes; guide the merchant to use the Theme Editor or Shopify CLI instead.",
   ].filter(Boolean).join("\n");
 
   return `You are a helpful AI assistant embedded in a Shopify admin app called Theme Assistant.
-You help merchants understand and modify their Shopify themes.
-You have access to tools that let you read theme files and propose changes.
+You help merchants manage their entire Shopify store — themes, orders, products, customers, discounts, metaobjects, markets, finances, analytics, and more.
+You have access to tools that let you read and modify theme files, and run any Shopify Admin GraphQL query or mutation.
 
-${permLines}
+${permissionNotes}
 
 Rules:
-- Always respond in Markdown. Use code blocks for file content or code snippets.
-- Before doing anything, verify you have the required permissions above — never call a tool you don't have scope for.
-- When asked about theme structure, sections, blocks, or settings: call list_theme_files first (with the relevant prefix like 'sections/', 'templates/', 'config/') to discover what exists, then read specific files as needed.
-- Section settings and blocks are defined in the {% schema %} tag inside each .liquid file — read the section file to understand its schema.
-- Global theme settings are in config/settings_schema.json; current values are in config/settings_data.json.
-- Always read the relevant file before proposing a change so your proposal reflects the actual current state.
-- When proposing a change, provide the complete new file content (not a diff) to propose_file_change.
-- Keep explanations concise and practical — one short paragraph is usually enough.
-- If the merchant asks what a file contains, read it and show the relevant parts in a code block.`;
+- Always respond in Markdown. Use code blocks for GraphQL queries, JSON results, or file content.
+- Before doing anything, check the granted scopes above — never call a tool for a resource you don't have scope for.
+- Theme files: call list_theme_files first (prefix: 'sections/', 'templates/', 'config/', etc.) to discover structure, then read specific files. Section settings/blocks are in the {% schema %} tag. Global settings are in config/settings_schema.json.
+- Always read the relevant theme file before proposing a change so your proposal reflects actual current content. Provide the complete new file content (not a diff) to propose_file_change.
+- Store data queries: use shopify_graphql_query for any read. You know Shopify's GraphQL Admin API — construct precise, paginated queries. Show results in readable Markdown tables or lists.
+- Store data mutations: ALWAYS describe exactly what you are about to change and ask the merchant to confirm BEFORE calling shopify_graphql_mutation. Never run delete, cancel, refund, or bulk-update mutations without explicit merchant approval in this conversation.
+- Keep explanations concise and practical.`;
 }
 
 // ─── Normalized tool definitions ─────────────────────────────────────────────
@@ -86,6 +86,42 @@ const TOOL_DEFS = [
         },
       },
       required: ["path", "new_content", "summary"],
+    },
+  },
+  {
+    name: "shopify_graphql_query",
+    description:
+      "Run any Shopify Admin GraphQL query to read store data — orders, products, customers, discounts, metaobjects, inventory, markets, finances, analytics, fulfillments, shipping, gift cards, reports, etc. Construct a valid GraphQL query and optionally pass variables.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "The GraphQL query string" },
+        variables: {
+          type: "object",
+          description: "Optional query variables",
+        },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "shopify_graphql_mutation",
+    description:
+      "Run a Shopify Admin GraphQL mutation to create, update, or delete store data. IMPORTANT: you MUST describe the change to the merchant and receive explicit confirmation in the conversation before calling this tool. Never run destructive mutations (delete, cancel, refund, bulk delete) without clear merchant approval.",
+    parameters: {
+      type: "object",
+      properties: {
+        mutation: { type: "string", description: "The GraphQL mutation string" },
+        variables: {
+          type: "object",
+          description: "Optional mutation variables",
+        },
+        summary: {
+          type: "string",
+          description: "One-sentence description of what this mutation does, shown to the merchant",
+        },
+      },
+      required: ["mutation", "summary"],
     },
   },
 ];
