@@ -4,6 +4,7 @@ import {
   useNavigation,
   useRouteError,
   Form,
+  Link,
   useActionData,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -428,8 +429,8 @@ export default function ThemeAssistantSession() {
             borderBottom: "1px solid #e1e3e5",
           }}
         >
-          <a
-            href="/"
+          <Link
+            to="/"
             style={{
               fontSize: "13px",
               color: "#6d7175",
@@ -440,7 +441,7 @@ export default function ThemeAssistantSession() {
             }}
           >
             ← Back
-          </a>
+          </Link>
           <span style={{ color: "#e1e3e5" }}>|</span>
           <span style={{ fontSize: "15px", fontWeight: 600, color: "#202223" }}>
             {chatSession.title || "Theme Assistant"}
@@ -521,12 +522,18 @@ export default function ThemeAssistantSession() {
             >
               <Form method="post">
                 <input type="hidden" name="intent" value="send_message" />
-                <div style={{ display: "flex", gap: "10px", alignItems: "flex-end" }}>
+                <div style={{ display: "flex", gap: "10px", alignItems: "stretch" }}>
                   <textarea
                     name="message"
                     placeholder='Describe a theme change, e.g. "Add a sale banner to the homepage"'
                     rows={2}
                     required
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        e.target.form.requestSubmit();
+                      }
+                    }}
                     style={{
                       flex: 1,
                       padding: "10px 14px",
@@ -543,7 +550,7 @@ export default function ThemeAssistantSession() {
                     type="submit"
                     disabled={isSubmitting}
                     style={{
-                      padding: "10px 22px",
+                      padding: "0 22px",
                       background: isSubmitting ? "#95c4b8" : "#008060",
                       color: "#fff",
                       border: "none",

@@ -1,4 +1,4 @@
-import { useLoaderData, useActionData, useNavigation, useRouteError, Form } from "react-router";
+import { useLoaderData, useActionData, useNavigation, useRouteError, Form, Link } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { authenticate } from "../shopify.server";
@@ -105,12 +105,12 @@ export default function ThemeAssistantSettings() {
       <div style={{ padding: "32px 40px", fontFamily: "Inter, sans-serif" }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "32px" }}>
-          <a
-            href="/"
+          <Link
+            to="/"
             style={{ fontSize: "13px", color: "#6d7175", textDecoration: "none" }}
           >
             ← Theme Assistant
-          </a>
+          </Link>
           <span style={{ color: "#e1e3e5" }}>|</span>
           <h1 style={{ fontSize: "22px", fontWeight: 600, margin: 0 }}>
             Configuration
@@ -220,8 +220,8 @@ export default function ThemeAssistantSettings() {
               >
                 {isSaving ? "Saving…" : "Save"}
               </button>
-              <a
-                href="/"
+              <Link
+                to="/"
                 style={{
                   padding: "10px 20px",
                   background: "#fff",
@@ -236,7 +236,7 @@ export default function ThemeAssistantSettings() {
                 }}
               >
                 Cancel
-              </a>
+              </Link>
             </div>
           </Form>
         </div>
