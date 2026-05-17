@@ -41,11 +41,12 @@ model ThemeChangeSession {
 }
 
 model ThemeChangeMessage {
-  id        String   @id @default(cuid())
-  sessionId String
-  role      String
-  content   String
-  createdAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  sessionId  String
+  role       String
+  content    String
+  proposalId String?
+  createdAt  DateTime @default(now())
 
   session ThemeChangeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 

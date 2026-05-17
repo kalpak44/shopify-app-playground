@@ -5,7 +5,7 @@ import { getMainTheme, readThemeFile } from "../theme.server";
 import { generateUnifiedDiff } from "../diff.server";
 
 const NO_CONFIG_MSG =
-  "No AI provider configured. Please go to Settings and add your API token.";
+  "No AI provider configured. Please go to **Settings** and add your API token.";
 
 const TOOL_STATUS = {
   get_active_theme: "Checking active theme…",
@@ -44,60 +44,73 @@ export const action = async ({ request, params }) => {
   const encoder = new TextEncoder();
   let cancelled = false;
 
-  // Cache theme lookup to avoid redundant Shopify API calls within one request
-  let cachedTheme = null;
-  const getTheme = async () => {
-    if (!cachedTheme) cachedTheme = await getMainTheme(admin);
-    return cachedTheme;
-  };
-
-  const executeTool = async (name, args) => {
-    if (name === "get_active_theme") {
-      const theme = await getTheme();
-      return { id: theme.id, name: theme.name };
-    }
-
-    if (name === "read_theme_file") {
-      const theme = await getTheme();
-      const fileContent = await readThemeFile(admin, theme.id, args.path);
-      return fileContent ?? `File not found: ${args.path}`;
-    }
-
-    if (name === "propose_file_change") {
-      const theme = await getTheme();
-      const before = (await readThemeFile(admin, theme.id, args.path)) ?? "";
-      const diff = generateUnifiedDiff(before, args.new_content, args.path);
-      await prisma.themeChangeProposal.create({
-        data: {
-          sessionId,
-          shop,
-          themeId: theme.id,
-          status: "pending",
-          summary: args.summary,
-          files: [{ path: args.path, before, after: args.new_content, diff }],
-        },
-      });
-      return {
-        success: true,
-        message: "Proposal created and is now visible in the sidebar for the merchant to review.",
-      };
-    }
-
-    return { error: `Unknown tool: ${name}` };
-  };
-
   const body = new ReadableStream({
     async start(controller) {
       const send = (evt) =>
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(evt)}\n\n`));
 
       let fullText = "";
+      let createdProposalId = null;
+
+      // Cache theme lookup to avoid redundant Shopify API calls per request
+      let cachedTheme = null;
+      const getTheme = async () => {
+        if (!cachedTheme) cachedTheme = await getMainTheme(admin);
+        return cachedTheme;
+      };
+
+      const executeTool = async (name, args) => {
+        if (name === "get_active_theme") {
+          const theme = await getTheme();
+          return { id: theme.id, name: theme.name };
+        }
+
+        if (name === "read_theme_file") {
+          const theme = await getTheme();
+          const fileContent = await readThemeFile(admin, theme.id, args.path);
+          return fileContent ?? `File not found: ${args.path}`;
+        }
+
+        if (name === "propose_file_change") {
+          const theme = await getTheme();
+          const before = (await readThemeFile(admin, theme.id, args.path)) ?? "";
+          const diff = generateUnifiedDiff(before, args.new_content, args.path);
+
+          const proposal = await prisma.themeChangeProposal.create({
+            data: {
+              sessionId,
+              shop,
+              themeId: theme.id,
+              status: "pending",
+              summary: args.summary,
+              files: [{ path: args.path, before, after: args.new_content, diff }],
+            },
+          });
+
+          createdProposalId = proposal.id;
+
+          // Push the inline proposal card to the client immediately
+          send({
+            type: "proposal",
+            proposalId: proposal.id,
+            summary: args.summary,
+            files: [{ path: args.path, diff }],
+          });
+
+          return {
+            success: true,
+            message: "Proposal created and shown to the merchant for review.",
+          };
+        }
+
+        return { error: `Unknown tool: ${name}` };
+      };
 
       if (!config?.apiToken) {
         for (const char of NO_CONFIG_MSG) {
           if (cancelled) break;
           send({ type: "chunk", text: char });
-          await new Promise((r) => setTimeout(r, 20));
+          await new Promise((r) => setTimeout(r, 18));
         }
         fullText = NO_CONFIG_MSG;
       } else {
@@ -112,13 +125,13 @@ export const action = async ({ request, params }) => {
             isCancelled: () => cancelled,
           });
         } catch (err) {
-          fullText = `Error: ${err.message}`;
+          fullText = `**Error:** ${err.message}`;
           send({ type: "chunk", text: fullText });
         }
       }
 
       await prisma.themeChangeMessage.create({
-        data: { sessionId, role: "assistant", content: fullText },
+        data: { sessionId, role: "assistant", content: fullText, proposalId: createdProposalId },
       });
 
       send({ type: "done" });
