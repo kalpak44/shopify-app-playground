@@ -1,6 +1,7 @@
 function buildSystemPrompt(scopes) {
   const scopeList = (scopes ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-  const canRead  = scopeList.length === 0 || scopeList.includes("read_themes");
+  // write_themes implies read access in Shopify's permission model
+  const canRead  = scopeList.length === 0 || scopeList.includes("read_themes") || scopeList.includes("write_themes");
   const canWrite = scopeList.length === 0 || scopeList.includes("write_themes");
 
   const permLines = [
