@@ -1,22 +1,42 @@
 const API_VERSION = "2025-10";
 
 export async function shopifyGraphql(shop, accessToken, query, variables = {}) {
-  const response = await fetch(
-    `https://${shop}/admin/api/${API_VERSION}/graphql.json`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Shopify-Access-Token": accessToken,
-      },
-      body: JSON.stringify({ query, variables }),
-    }
-  );
+  const operation = query.match(/(?:query|mutation)\s+(\w+)/)?.[1] ?? "anonymous";
+  console.log(`[Shopify] ${operation}`, Object.keys(variables).length ? variables : "");
+
+  let response;
+  try {
+    response = await fetch(
+      `https://${shop}/admin/api/${API_VERSION}/graphql.json`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Shopify-Access-Token": accessToken,
+        },
+        body: JSON.stringify({ query, variables }),
+      }
+    );
+  } catch (err) {
+    console.error(`[Shopify] ${operation} — fetch failed:`, err.message, err.cause ?? "");
+    throw err;
+  }
+
   if (!response.ok) {
     const text = await response.text();
+    console.error(`[Shopify] ${operation} — HTTP ${response.status}:`, text.slice(0, 300));
     throw new Error(`Shopify API ${response.status}: ${text.slice(0, 200)}`);
   }
-  return response.json();
+
+  const json = await response.json();
+
+  if (json.errors?.length) {
+    console.error(`[Shopify] ${operation} — GraphQL errors:`, JSON.stringify(json.errors));
+  } else {
+    console.log(`[Shopify] ${operation} — ok`);
+  }
+
+  return json;
 }
 
 const GET_THEMES_QUERY = `
