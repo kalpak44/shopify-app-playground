@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { redirect, useLoaderData, useRouteError, Form } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
@@ -46,7 +46,6 @@ export const action = async ({ request }) => {
   if (intent === "delete_session") {
     const sessionId = formData.get("sessionId")?.toString();
     if (sessionId) {
-      // deleteMany with shop filter ensures ownership — no-op if not owned
       await prisma.themeChangeSession.deleteMany({
         where: { id: sessionId, shop },
       });
@@ -57,60 +56,81 @@ export const action = async ({ request }) => {
   return null;
 };
 
-// ─── Delete confirmation modal ────────────────────────────────────────────────
+// ─── Delete confirmation dialog ───────────────────────────────────────────────
 
-function DeleteModal({ session, onCancel }) {
+// Uses the native <dialog> element so it renders in the browser's top layer —
+// bypasses any stacking context created by AppProvider or AppBridge.
+function DeleteDialog({ session, onClose }) {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    ref.current?.showModal();
+  }, []);
+
   return (
-    <>
-      {/* Backdrop */}
-      <div
-        onClick={onCancel}
-        style={{
-          position: "fixed",
-          inset: 0,
-          background: "rgba(0,0,0,0.45)",
-          zIndex: 100,
-        }}
-      />
-      {/* Dialog */}
-      <div
-        style={{
-          position: "fixed",
-          top: "50%",
-          left: "50%",
-          transform: "translate(-50%, -50%)",
-          background: "#fff",
-          borderRadius: "12px",
-          padding: "28px 32px",
-          width: "400px",
-          maxWidth: "calc(100vw - 32px)",
-          zIndex: 101,
-          boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
-        }}
-      >
-        <h2 style={{ margin: "0 0 10px", fontSize: "17px", fontWeight: 600, color: "#202223" }}>
+    <dialog
+      ref={ref}
+      onClose={onClose}
+      onClick={(e) => { if (e.target === ref.current) ref.current.close(); }}
+      style={{
+        border: "none",
+        borderRadius: "12px",
+        padding: 0,
+        width: "420px",
+        maxWidth: "calc(100vw - 32px)",
+        boxShadow: "0 4px 20px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.08)",
+        fontFamily: "Inter, sans-serif",
+      }}
+    >
+      {/* polaris-style: pseudo-backdrop via ::backdrop isn't styleable inline,
+          but the native backdrop is fine for an embedded app */}
+      <div style={{ padding: "24px" }}>
+        <p
+          style={{
+            margin: "0 0 4px",
+            fontSize: "16px",
+            fontWeight: 650,
+            color: "#202223",
+          }}
+        >
           Remove session?
-        </h2>
-        <p style={{ margin: "0 0 24px", fontSize: "14px", color: "#6d7175", lineHeight: 1.5 }}>
-          <strong style={{ color: "#202223" }}>
+        </p>
+        <p
+          style={{
+            margin: "0 0 20px",
+            fontSize: "14px",
+            color: "#6d7175",
+            lineHeight: 1.55,
+          }}
+        >
+          <strong style={{ color: "#202223", fontWeight: 600 }}>
             {session.title || "Untitled session"}
           </strong>{" "}
-          and all its messages and proposals will be permanently deleted. This
-          cannot be undone.
+          and all its messages and proposals will be permanently deleted.
         </p>
-        <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+
+        <div
+          style={{
+            borderTop: "1px solid #e1e3e5",
+            paddingTop: "16px",
+            display: "flex",
+            justifyContent: "flex-end",
+            gap: "8px",
+          }}
+        >
           <button
             type="button"
-            onClick={onCancel}
+            onClick={() => ref.current?.close()}
             style={{
-              padding: "9px 20px",
+              padding: "8px 16px",
               background: "#fff",
               color: "#202223",
               border: "1px solid #c9cccf",
-              borderRadius: "8px",
+              borderRadius: "6px",
               fontWeight: 500,
               fontSize: "14px",
               cursor: "pointer",
+              fontFamily: "inherit",
             }}
           >
             Cancel
@@ -121,22 +141,23 @@ function DeleteModal({ session, onCancel }) {
             <button
               type="submit"
               style={{
-                padding: "9px 20px",
+                padding: "8px 16px",
                 background: "#d72c0d",
                 color: "#fff",
-                border: "none",
-                borderRadius: "8px",
+                border: "1px solid #b3200a",
+                borderRadius: "6px",
                 fontWeight: 600,
                 fontSize: "14px",
                 cursor: "pointer",
+                fontFamily: "inherit",
               }}
             >
-              Remove
+              Delete
             </button>
           </Form>
         </div>
       </div>
-    </>
+    </dialog>
   );
 }
 
@@ -159,22 +180,22 @@ export default function Index() {
           }}
         >
           <div>
-            <h1 style={{ fontSize: "22px", fontWeight: 600, margin: "0 0 4px" }}>
+            <h1 style={{ fontSize: "22px", fontWeight: 650, margin: "0 0 4px", color: "#202223" }}>
               Theme Assistant
             </h1>
             <p style={{ fontSize: "14px", color: "#6d7175", margin: 0 }}>
               Chat with the assistant to propose and apply changes to your active theme.
             </p>
           </div>
-          <div style={{ display: "flex", gap: "10px" }}>
+          <div style={{ display: "flex", gap: "8px" }}>
             <a
               href="/theme-assistant/settings"
               style={{
-                padding: "10px 18px",
+                padding: "8px 16px",
                 background: "#fff",
                 color: "#202223",
                 border: "1px solid #c9cccf",
-                borderRadius: "8px",
+                borderRadius: "6px",
                 fontWeight: 500,
                 fontSize: "14px",
                 textDecoration: "none",
@@ -183,25 +204,26 @@ export default function Index() {
                 gap: "6px",
               }}
             >
-              ⚙ Settings
+              Settings
             </a>
             <Form method="post">
               <input type="hidden" name="intent" value="new_session" />
               <button
                 type="submit"
                 style={{
-                  padding: "10px 20px",
+                  padding: "8px 16px",
                   background: "#008060",
                   color: "#fff",
-                  border: "none",
-                  borderRadius: "8px",
+                  border: "1px solid #006e52",
+                  borderRadius: "6px",
                   fontWeight: 600,
                   fontSize: "14px",
                   cursor: "pointer",
                   whiteSpace: "nowrap",
+                  fontFamily: "inherit",
                 }}
               >
-                + New Session
+                New session
               </button>
             </Form>
           </div>
@@ -209,22 +231,34 @@ export default function Index() {
 
         {/* Sessions list */}
         {sessions.length === 0 ? (
-          <p style={{ fontSize: "14px", color: "#6d7175" }}>
-            No sessions yet. Start one to begin making theme changes.
-          </p>
+          <div
+            style={{
+              padding: "40px 20px",
+              textAlign: "center",
+              border: "1px dashed #c9cccf",
+              borderRadius: "8px",
+              color: "#6d7175",
+              fontSize: "14px",
+            }}
+          >
+            No sessions yet. Click <strong>New session</strong> to get started.
+          </div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-            {sessions.map((s) => (
+          <div
+            style={{
+              border: "1px solid #e1e3e5",
+              borderRadius: "8px",
+              overflow: "hidden",
+              background: "#fff",
+            }}
+          >
+            {sessions.map((s, i) => (
               <div
                 key={s.id}
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  gap: "12px",
-                  padding: "14px 18px",
-                  background: "#fff",
-                  border: "1px solid #e1e3e5",
-                  borderRadius: "8px",
+                  borderTop: i === 0 ? "none" : "1px solid #e1e3e5",
                 }}
               >
                 <a
@@ -234,40 +268,50 @@ export default function Index() {
                     display: "flex",
                     alignItems: "center",
                     gap: "12px",
+                    padding: "14px 16px",
                     textDecoration: "none",
                     color: "inherit",
                     minWidth: 0,
                   }}
                 >
-                  <span style={{ flex: 1, fontWeight: 500, fontSize: "14px", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <span
+                    style={{
+                      flex: 1,
+                      fontWeight: 500,
+                      fontSize: "14px",
+                      color: "#202223",
+                      minWidth: 0,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
                     {s.title || "Untitled session"}
                   </span>
-                  <span style={{ fontSize: "12px", color: "#6d7175", whiteSpace: "nowrap" }}>
+                  <span style={{ fontSize: "13px", color: "#8c9196", whiteSpace: "nowrap" }}>
                     {new Date(s.createdAt).toLocaleDateString()}
                   </span>
-                  <span style={{ fontSize: "16px", color: "#8c9196" }}>→</span>
                 </a>
                 <button
                   type="button"
                   onClick={() => setDeleteTarget(s)}
-                  title="Remove session"
+                  title="Delete session"
                   style={{
-                    flexShrink: 0,
-                    padding: "5px 10px",
+                    margin: "0 12px",
+                    padding: "6px 10px",
                     background: "transparent",
                     color: "#8c9196",
                     border: "1px solid transparent",
                     borderRadius: "6px",
                     cursor: "pointer",
-                    fontSize: "16px",
-                    lineHeight: 1,
-                    display: "flex",
-                    alignItems: "center",
+                    fontSize: "14px",
+                    fontFamily: "inherit",
+                    flexShrink: 0,
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.color = "#d72c0d";
-                    e.currentTarget.style.borderColor = "#ffc1cc";
-                    e.currentTarget.style.background = "#ffeef0";
+                    e.currentTarget.style.borderColor = "#fac8c3";
+                    e.currentTarget.style.background = "#fff4f4";
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.color = "#8c9196";
@@ -275,7 +319,7 @@ export default function Index() {
                     e.currentTarget.style.background = "transparent";
                   }}
                 >
-                  🗑
+                  Delete
                 </button>
               </div>
             ))}
@@ -283,11 +327,11 @@ export default function Index() {
         )}
       </div>
 
-      {/* Confirmation modal */}
+      {/* Native dialog — renders in the top layer, always above AppProvider */}
       {deleteTarget && (
-        <DeleteModal
+        <DeleteDialog
           session={deleteTarget}
-          onCancel={() => setDeleteTarget(null)}
+          onClose={() => setDeleteTarget(null)}
         />
       )}
     </AppProvider>
