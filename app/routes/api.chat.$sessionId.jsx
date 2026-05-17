@@ -15,8 +15,9 @@ const TOOL_STATUS = {
 };
 
 export const action = async ({ request, params }) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const shop = session.shop;
+  const { accessToken } = session;
   const { sessionId } = params;
 
   const chatSession = await prisma.themeChangeSession.findFirst({
@@ -56,7 +57,7 @@ export const action = async ({ request, params }) => {
       // Cache theme lookup to avoid redundant Shopify API calls per request
       let cachedTheme = null;
       const getTheme = async () => {
-        if (!cachedTheme) cachedTheme = await getMainTheme(admin);
+        if (!cachedTheme) cachedTheme = await getMainTheme(shop, accessToken);
         return cachedTheme;
       };
 
@@ -68,19 +69,19 @@ export const action = async ({ request, params }) => {
 
         if (name === "list_theme_files") {
           const theme = await getTheme();
-          const files = await listThemeFiles(admin, theme.id, args.prefix ?? null);
+          const files = await listThemeFiles(shop, accessToken, theme.id, args.prefix ?? null);
           return files;
         }
 
         if (name === "read_theme_file") {
           const theme = await getTheme();
-          const fileContent = await readThemeFile(admin, theme.id, args.path);
+          const fileContent = await readThemeFile(shop, accessToken, theme.id, args.path);
           return fileContent ?? `File not found: ${args.path}`;
         }
 
         if (name === "propose_file_change") {
           const theme = await getTheme();
-          const before = (await readThemeFile(admin, theme.id, args.path)) ?? "";
+          const before = (await readThemeFile(shop, accessToken, theme.id, args.path)) ?? "";
           const diff = generateUnifiedDiff(before, args.new_content, args.path);
 
           const proposal = await prisma.themeChangeProposal.create({

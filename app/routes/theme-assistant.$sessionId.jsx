@@ -53,8 +53,9 @@ export const loader = async ({ request, params }) => {
 // ─── Action (approve / reject) ───────────────────────────────────────────────
 
 export const action = async ({ request, params }) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const shop = session.shop;
+  const { accessToken } = session;
   const { sessionId } = params;
 
   const chatSession = await prisma.themeChangeSession.findFirst({
@@ -79,7 +80,7 @@ export const action = async ({ request, params }) => {
     for (const file of proposal.files) {
       let current;
       try {
-        current = await readThemeFile(admin, proposal.themeId, file.path);
+        current = await readThemeFile(shop, accessToken, proposal.themeId, file.path);
       } catch (err) {
         return { error: `Could not re-read ${file.path}: ${err.message}` };
       }
@@ -92,7 +93,7 @@ export const action = async ({ request, params }) => {
 
     for (const file of proposal.files) {
       try {
-        await writeThemeFile(admin, proposal.themeId, file.path, file.after);
+        await writeThemeFile(shop, accessToken, proposal.themeId, file.path, file.after);
       } catch (err) {
         const errorUserMsg = `I tried to apply the proposed change to \`${file.path}\` but it failed with this error: ${err.message}. Can you suggest an alternative approach?`;
 
@@ -120,7 +121,7 @@ export const action = async ({ request, params }) => {
               history,
               executeTool: async (name, args) => {
                 if (name === "get_active_theme") return { id: proposal.themeId, name: "active theme" };
-                if (name === "read_theme_file") return (await readThemeFile(admin, proposal.themeId, args.path)) ?? "File not found";
+                if (name === "read_theme_file") return (await readThemeFile(shop, accessToken, proposal.themeId, args.path)) ?? "File not found";
                 return { error: `Tool ${name} is not available right now` };
               },
               onChunk: () => {},
