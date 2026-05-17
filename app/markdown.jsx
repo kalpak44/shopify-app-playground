@@ -10,8 +10,9 @@ const INLINE_CODE = {
 };
 
 const CODE_BLOCK = {
-  background: "#1e1e2e",
-  color: "#cdd6f4",
+  background: "#f6f6f7",
+  color: "#202223",
+  border: "1px solid #e1e3e5",
   padding: "14px 18px",
   borderRadius: "8px",
   fontSize: "12.5px",

@@ -94,10 +94,6 @@ export async function readThemeFile(admin, themeId, path) {
 }
 
 export async function writeThemeFile(admin, themeId, path, content) {
-  if (!ALLOWED_FILES.has(path)) {
-    throw new Error(`Writing "${path}" is not supported in this version.`);
-  }
-
   const response = await admin.graphql(UPSERT_THEME_FILE_MUTATION, {
     variables: {
       themeId,
@@ -114,7 +110,7 @@ export async function writeThemeFile(admin, themeId, path, content) {
   const result = data?.themeFilesUpsert;
   if (result?.userErrors?.length) {
     throw new Error(
-      `Theme write error: ${result.userErrors.map((e) => e.message).join(", ")}`
+      result.userErrors.map((e) => e.message).join(", ")
     );
   }
 

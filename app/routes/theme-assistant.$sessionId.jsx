@@ -14,6 +14,7 @@ import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { readThemeFile, writeThemeFile } from "../theme.server";
+import { runAgentLoop } from "../ai.server";
 import { Markdown } from "../markdown.jsx";
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
@@ -93,7 +94,47 @@ export const action = async ({ request, params }) => {
       try {
         await writeThemeFile(admin, proposal.themeId, file.path, file.after);
       } catch (err) {
-        return { error: `Failed to write ${file.path}: ${err.message}` };
+        const errorUserMsg = `I tried to apply the proposed change to \`${file.path}\` but it failed with this error: ${err.message}. Can you suggest an alternative approach?`;
+
+        await prisma.themeChangeMessage.create({
+          data: { sessionId, role: "user", content: errorUserMsg },
+        });
+
+        const [config, history] = await Promise.all([
+          prisma.themeAssistantConfig.findUnique({ where: { shop } }),
+          prisma.themeChangeMessage.findMany({
+            where: { sessionId },
+            orderBy: { createdAt: "asc" },
+            take: 40,
+          }),
+        ]);
+
+        let aiResponse =
+          "The change couldn't be applied automatically. You can apply it manually via **Online Store → Themes → Edit code** in your Shopify admin, or by using the Shopify CLI (`shopify theme pull`, edit the file, then `shopify theme push`).";
+
+        if (config?.apiToken) {
+          try {
+            aiResponse = await runAgentLoop({
+              config,
+              history,
+              executeTool: async (name, args) => {
+                if (name === "get_active_theme") return { id: proposal.themeId, name: "active theme" };
+                if (name === "read_theme_file") return (await readThemeFile(admin, proposal.themeId, args.path)) ?? "File not found";
+                return { error: `Tool ${name} is not available right now` };
+              },
+              onChunk: () => {},
+              isCancelled: () => false,
+            });
+          } catch {
+            // use fallback message
+          }
+        }
+
+        await prisma.themeChangeMessage.create({
+          data: { sessionId, role: "assistant", content: aiResponse },
+        });
+
+        throw redirect(`/theme-assistant/${sessionId}`);
       }
     }
 
@@ -150,18 +191,18 @@ function DiffViewer({ diff }) {
         fontFamily: "'SFMono-Regular', Consolas, monospace",
         lineHeight: "1.55",
         overflowX: "auto",
-        background: "#0d1117",
+        background: "#fafbfc",
         maxHeight: "460px",
         overflowY: "auto",
       }}
     >
       {lines.map((line, i) => {
-        let color = "#8b949e";
+        let color = "inherit";
         let bg = "transparent";
-        if (line.startsWith("+") && !line.startsWith("+++")) { color = "#3fb950"; bg = "#0d2a12"; }
-        else if (line.startsWith("-") && !line.startsWith("---")) { color = "#f85149"; bg = "#2d0f0f"; }
-        else if (line.startsWith("@@")) { color = "#79c0ff"; bg = "#0c1d35"; }
-        else if (line.startsWith("---") || line.startsWith("+++")) { color = "#8b949e"; }
+        if (line.startsWith("+") && !line.startsWith("+++")) { color = "#22863a"; bg = "#e6ffed"; }
+        else if (line.startsWith("-") && !line.startsWith("---")) { color = "#cb2431"; bg = "#ffeef0"; }
+        else if (line.startsWith("@@")) { color = "#0550ae"; bg = "#dbedff"; }
+        else if (line.startsWith("---") || line.startsWith("+++")) { color = "#586069"; }
         return (
           <span key={i} style={{ display: "block", background: bg, color, whiteSpace: "pre" }}>
             {line || " "}
@@ -177,19 +218,19 @@ function DiffViewer({ diff }) {
 function InlineProposalCard({ proposal, actionError, isSubmitting }) {
   const isPending = proposal.status === "pending";
   const statusStyle = {
-    pending:  { bg: "#2d2213", color: "#e3b341", border: "#6e4f00" },
-    approved: { bg: "#0d2a12", color: "#3fb950", border: "#1a4721" },
-    rejected: { bg: "#2d0f0f", color: "#f85149", border: "#5c1a1a" },
-  }[proposal.status] ?? { bg: "#2d2213", color: "#e3b341", border: "#6e4f00" };
+    pending:  { bg: "#fff3cd", color: "#856404", border: "#ffc107" },
+    approved: { bg: "#d4edda", color: "#155724", border: "#c3e6cb" },
+    rejected: { bg: "#f8d7da", color: "#721c24", border: "#f5c6cb" },
+  }[proposal.status] ?? { bg: "#fff3cd", color: "#856404", border: "#ffc107" };
 
   return (
     <div
       style={{
         margin: "12px 0 4px",
-        border: "1px solid #30363d",
+        border: "1px solid #e1e3e5",
         borderRadius: "8px",
         overflow: "hidden",
-        background: "#161b22",
+        background: "#fff",
         fontSize: "13px",
       }}
     >
@@ -200,17 +241,17 @@ function InlineProposalCard({ proposal, actionError, isSubmitting }) {
           alignItems: "center",
           gap: "10px",
           padding: "8px 14px",
-          background: "#21262d",
-          borderBottom: "1px solid #30363d",
+          background: "#f6f6f7",
+          borderBottom: "1px solid #e1e3e5",
         }}
       >
-        <span style={{ color: "#8b949e", fontSize: "12px" }}>📄</span>
+        <span style={{ color: "#6d7175", fontSize: "12px" }}>📄</span>
         <span
           style={{
             flex: 1,
             fontFamily: "'SFMono-Regular', Consolas, monospace",
             fontSize: "12px",
-            color: "#e6edf3",
+            color: "#202223",
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
@@ -234,7 +275,7 @@ function InlineProposalCard({ proposal, actionError, isSubmitting }) {
       </div>
 
       {/* Summary */}
-      <div style={{ padding: "8px 14px", color: "#8b949e", fontSize: "12px", borderBottom: "1px solid #30363d" }}>
+      <div style={{ padding: "8px 14px", color: "#6d7175", fontSize: "12px", borderBottom: "1px solid #e1e3e5" }}>
         {proposal.summary}
       </div>
 
@@ -248,9 +289,9 @@ function InlineProposalCard({ proposal, actionError, isSubmitting }) {
         <div
           style={{
             padding: "8px 14px",
-            background: "#2d0f0f",
-            borderTop: "1px solid #5c1a1a",
-            color: "#f85149",
+            background: "#ffeef0",
+            borderTop: "1px solid #ffc1cc",
+            color: "#cb2431",
             fontSize: "12px",
           }}
         >
@@ -265,8 +306,8 @@ function InlineProposalCard({ proposal, actionError, isSubmitting }) {
             display: "flex",
             gap: "8px",
             padding: "10px 14px",
-            borderTop: "1px solid #30363d",
-            background: "#21262d",
+            borderTop: "1px solid #e1e3e5",
+            background: "#f6f6f7",
           }}
         >
           <Form method="post">
@@ -277,9 +318,9 @@ function InlineProposalCard({ proposal, actionError, isSubmitting }) {
               disabled={isSubmitting}
               style={{
                 padding: "6px 16px",
-                background: isSubmitting ? "#1a3a2a" : "#238636",
-                color: isSubmitting ? "#3fb950" : "#fff",
-                border: "1px solid #2ea043",
+                background: isSubmitting ? "#95c4b8" : "#008060",
+                color: "#fff",
+                border: "none",
                 borderRadius: "6px",
                 fontWeight: 600,
                 fontSize: "12px",
@@ -298,9 +339,9 @@ function InlineProposalCard({ proposal, actionError, isSubmitting }) {
               disabled={isSubmitting}
               style={{
                 padding: "6px 16px",
-                background: "transparent",
-                color: "#f85149",
-                border: "1px solid #5c1a1a",
+                background: "#fff",
+                color: "#d72c0d",
+                border: "1px solid #d72c0d",
                 borderRadius: "6px",
                 fontWeight: 600,
                 fontSize: "12px",
@@ -432,8 +473,8 @@ export default function ThemeAssistantSession() {
           flexDirection: "column",
           height: "100vh",
           fontFamily: "Inter, -apple-system, sans-serif",
-          background: "#0d1117",
-          color: "#e6edf3",
+          background: "#f6f6f7",
+          color: "#202223",
         }}
       >
         {/* ── Header ── */}
@@ -444,19 +485,19 @@ export default function ThemeAssistantSession() {
             alignItems: "center",
             gap: "12px",
             padding: "0 20px",
-            height: "48px",
-            background: "#161b22",
-            borderBottom: "1px solid #30363d",
+            height: "52px",
+            background: "#fff",
+            borderBottom: "1px solid #e1e3e5",
           }}
         >
           <Link
             to="/"
-            style={{ fontSize: "13px", color: "#8b949e", textDecoration: "none", display: "flex", alignItems: "center", gap: "4px" }}
+            style={{ fontSize: "13px", color: "#6d7175", textDecoration: "none", display: "flex", alignItems: "center", gap: "4px" }}
           >
             ← Back
           </Link>
-          <span style={{ color: "#30363d" }}>|</span>
-          <span style={{ fontSize: "14px", fontWeight: 600, color: "#e6edf3" }}>
+          <span style={{ color: "#e1e3e5" }}>|</span>
+          <span style={{ fontSize: "15px", fontWeight: 600, color: "#202223" }}>
             {chatSession.title || "Theme Assistant"}
           </span>
         </div>
@@ -473,9 +514,9 @@ export default function ThemeAssistantSession() {
           <div style={{ maxWidth: "760px", margin: "0 auto", padding: "0 24px" }}>
 
             {messages.length === 0 && pendingUserMessage === null && (
-              <div style={{ color: "#8b949e", fontSize: "14px", textAlign: "center", padding: "40px 0" }}>
+              <div style={{ color: "#6d7175", fontSize: "14px", textAlign: "center", padding: "40px 0" }}>
                 <div style={{ fontSize: "28px", marginBottom: "12px" }}>🎨</div>
-                <p style={{ margin: "0 0 6px", fontWeight: 500, color: "#e6edf3" }}>Theme Assistant</p>
+                <p style={{ margin: "0 0 6px", fontWeight: 500, color: "#202223" }}>Theme Assistant</p>
                 <p style={{ margin: 0, fontSize: "13px" }}>
                   Ask me to read or modify your active Shopify theme.
                 </p>
@@ -517,7 +558,7 @@ export default function ThemeAssistantSession() {
                   alignItems: "center",
                   gap: "8px",
                   marginBottom: "12px",
-                  color: "#8b949e",
+                  color: "#6d7175",
                   fontSize: "12px",
                 }}
               >
@@ -526,8 +567,8 @@ export default function ThemeAssistantSession() {
                     display: "inline-block",
                     width: "12px",
                     height: "12px",
-                    border: "2px solid #30363d",
-                    borderTopColor: "#58a6ff",
+                    border: "2px solid #e1e3e5",
+                    borderTopColor: "#008060",
                     borderRadius: "50%",
                     animation: "spin 0.8s linear infinite",
                     flexShrink: 0,
@@ -557,8 +598,8 @@ export default function ThemeAssistantSession() {
           style={{
             flexShrink: 0,
             padding: "14px 20px",
-            borderTop: "1px solid #30363d",
-            background: "#161b22",
+            borderTop: "1px solid #e1e3e5",
+            background: "#fff",
           }}
         >
           <div style={{ maxWidth: "760px", margin: "0 auto" }}>
@@ -580,9 +621,9 @@ export default function ThemeAssistantSession() {
                     flex: 1,
                     padding: "10px 14px",
                     fontSize: "14px",
-                    background: "#0d1117",
-                    color: "#e6edf3",
-                    border: "1px solid #30363d",
+                    background: "#fff",
+                    color: "#202223",
+                    border: "1px solid #c9cccf",
                     borderRadius: "8px",
                     resize: "none",
                     fontFamily: "inherit",
@@ -595,9 +636,9 @@ export default function ThemeAssistantSession() {
                   disabled={isSending}
                   style={{
                     padding: "0 20px",
-                    background: isSending ? "#1a3a2a" : "#238636",
-                    color: isSending ? "#3fb950" : "#fff",
-                    border: "1px solid #2ea043",
+                    background: isSending ? "#95c4b8" : "#008060",
+                    color: "#fff",
+                    border: "none",
                     borderRadius: "8px",
                     fontWeight: 600,
                     fontSize: "14px",
@@ -628,7 +669,7 @@ function UserMessage({ content }) {
           maxWidth: "72%",
           padding: "10px 14px",
           borderRadius: "18px 18px 4px 18px",
-          background: "#1f6feb",
+          background: "#008060",
           color: "#fff",
           fontSize: "14px",
           lineHeight: "1.55",
@@ -642,7 +683,7 @@ function UserMessage({ content }) {
 
 function AssistantMessage({ content, streaming }) {
   return (
-    <div style={{ fontSize: "14px", color: "#e6edf3", lineHeight: "1.65" }}>
+    <div style={{ fontSize: "14px", color: "#202223", lineHeight: "1.65" }}>
       <Markdown>{content}</Markdown>
       {streaming && (
         <span
@@ -650,7 +691,7 @@ function AssistantMessage({ content, streaming }) {
             display: "inline-block",
             width: "2px",
             height: "14px",
-            background: "#58a6ff",
+            background: "#6d7175",
             marginLeft: "2px",
             verticalAlign: "text-bottom",
             animation: "blink 1s step-end infinite",
