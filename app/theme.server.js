@@ -25,6 +25,12 @@ export async function shopifyGraphql(shop, accessToken, query, variables = {}) {
   if (!response.ok) {
     const text = await response.text();
     console.error(`[Shopify] ${operation} — HTTP ${response.status}:`, text.slice(0, 300));
+    if (response.status === 401) {
+      throw new Error(
+        "Shopify API returned 401 — the session token is invalid or expired. " +
+        "Please reload the app from the Shopify admin to re-authenticate and get a fresh token."
+      );
+    }
     throw new Error(`Shopify API ${response.status}: ${text.slice(0, 200)}`);
   }
 
