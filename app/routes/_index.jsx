@@ -1,19 +1,26 @@
-import { redirect, useLoaderData, useRouteError, Link } from "react-router";
+import { redirect, useLoaderData, useRouteError, Form } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { authenticate } from "../shopify.server";
+import prisma from "../db.server";
 
 export const loader = async ({ request }) => {
   try {
     const { session } = await authenticate.admin(request);
+    const shop = session.shop;
+
+    const sessions = await prisma.themeChangeSession.findMany({
+      where: { shop },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      select: { id: true, title: true, status: true, createdAt: true },
+    });
 
     return {
       apiKey: process.env.SHOPIFY_API_KEY || "",
-      shop: session.shop,
+      sessions,
     };
   } catch (error) {
-    // When accessed without Shopify context (no session, no ?shop= param),
-    // authenticate.admin throws 410. Redirect to the manual login page instead.
     if (error instanceof Response && error.status === 410) {
       throw redirect("/auth/login");
     }
@@ -21,81 +28,134 @@ export const loader = async ({ request }) => {
   }
 };
 
+export const action = async ({ request }) => {
+  const { session } = await authenticate.admin(request);
+  const shop = session.shop;
+
+  const formData = await request.formData();
+  if (formData.get("intent") === "new_session") {
+    const created = await prisma.themeChangeSession.create({
+      data: { shop, title: "New session", status: "open" },
+    });
+    throw redirect(`/theme-assistant/${created.id}`);
+  }
+
+  return null;
+};
+
+const STATUS_COLORS = { open: "#2196F3", closed: "#9E9E9E" };
+
 export default function Index() {
-  const { apiKey, shop } = useLoaderData();
+  const { apiKey, sessions } = useLoaderData();
 
   return (
     <AppProvider embedded apiKey={apiKey}>
-      <s-page heading="App Playground">
-        <s-section heading="Welcome">
-          <s-text>App is running for <strong>{shop}</strong>.</s-text>
-        </s-section>
-        <s-section heading="Features">
-          <Link
-            to="/theme-assistant"
-            style={{ textDecoration: "none", display: "block" }}
-          >
-            <div
+      <div style={{ padding: "32px 40px", fontFamily: "Inter, sans-serif" }}>
+        {/* Header */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: "32px",
+          }}
+        >
+          <div>
+            <h1 style={{ fontSize: "22px", fontWeight: 600, margin: "0 0 4px" }}>
+              Theme Assistant
+            </h1>
+            <p style={{ fontSize: "14px", color: "#6d7175", margin: 0 }}>
+              Chat with the assistant to propose and apply changes to your active theme.
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: "10px" }}>
+            <a
+              href="/theme-assistant/settings"
               style={{
-                padding: "16px 20px",
-                border: "1px solid #e1e3e5",
-                borderRadius: "8px",
+                padding: "10px 18px",
                 background: "#fff",
-                cursor: "pointer",
-                transition: "box-shadow 0.15s",
+                color: "#202223",
+                border: "1px solid #c9cccf",
+                borderRadius: "8px",
+                fontWeight: 500,
+                fontSize: "14px",
+                textDecoration: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
               }}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.boxShadow =
-                  "0 2px 8px rgba(0,0,0,0.12)")
-              }
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.boxShadow = "none")
-              }
             >
-              <div
+              ⚙ Settings
+            </a>
+            <Form method="post">
+              <input type="hidden" name="intent" value="new_session" />
+              <button
+                type="submit"
+                style={{
+                  padding: "10px 20px",
+                  background: "#008060",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "8px",
+                  fontWeight: 600,
+                  fontSize: "14px",
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                + New Session
+              </button>
+            </Form>
+          </div>
+        </div>
+
+        {/* Sessions list */}
+        {sessions.length === 0 ? (
+          <p style={{ fontSize: "14px", color: "#6d7175" }}>
+            No sessions yet. Start one to begin making theme changes.
+          </p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            {sessions.map((s) => (
+              <a
+                key={s.id}
+                href={`/theme-assistant/${s.id}`}
                 style={{
                   display: "flex",
                   alignItems: "center",
                   gap: "12px",
+                  padding: "14px 18px",
+                  background: "#fff",
+                  border: "1px solid #e1e3e5",
+                  borderRadius: "8px",
+                  textDecoration: "none",
+                  color: "inherit",
                 }}
               >
-                <span style={{ fontSize: "24px" }}>🎨</span>
-                <div>
-                  <p
-                    style={{
-                      margin: 0,
-                      fontWeight: 600,
-                      fontSize: "15px",
-                      color: "#202223",
-                    }}
-                  >
-                    Theme Assistant
-                  </p>
-                  <p
-                    style={{
-                      margin: "4px 0 0",
-                      fontSize: "13px",
-                      color: "#6d7175",
-                    }}
-                  >
-                    Chat with an assistant, review proposed theme file diffs,
-                    and approve or reject changes before they are applied.
-                  </p>
-                </div>
+                <span style={{ flex: 1, fontWeight: 500, fontSize: "14px" }}>
+                  {s.title || "Untitled session"}
+                </span>
                 <span
                   style={{
-                    marginLeft: "auto",
-                    fontSize: "18px",
-                    color: "#8c9196",
+                    fontSize: "12px",
+                    padding: "2px 10px",
+                    borderRadius: "12px",
+                    background: STATUS_COLORS[s.status] ?? "#ccc",
+                    color: "#fff",
+                    fontWeight: 500,
                   }}
                 >
-                  →
+                  {s.status}
                 </span>
-              </div>
-            </div>
-          </Link>
-        </s-section>
-      </s-page>
+                <span style={{ fontSize: "12px", color: "#6d7175" }}>
+                  {new Date(s.createdAt).toLocaleDateString()}
+                </span>
+                <span style={{ fontSize: "16px", color: "#8c9196" }}>→</span>
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
     </AppProvider>
   );
 }

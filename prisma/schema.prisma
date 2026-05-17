@@ -69,3 +69,14 @@ model ThemeChangeProposal {
   @@index([sessionId])
   @@index([shop, status])
 }
+
+model ThemeAssistantConfig {
+  id        String   @id @default(cuid())
+  shop      String   @unique
+  provider  String   @default("openai")
+  baseUrl   String?
+  apiToken  String?
+  modelName String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

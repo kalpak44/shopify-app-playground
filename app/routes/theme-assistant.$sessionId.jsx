@@ -1,7 +1,6 @@
 import {
   redirect,
   useLoaderData,
-  useRouteLoaderData,
   useNavigation,
   Form,
   useActionData,
@@ -39,13 +38,11 @@ export const loader = async ({ request, params }) => {
   ]);
 
   return {
+    apiKey: process.env.SHOPIFY_API_KEY || "",
     shop,
     chatSession,
     messages,
-    proposals: proposals.map((p) => ({
-      ...p,
-      files: p.files,
-    })),
+    proposals,
   };
 };
 
@@ -394,151 +391,212 @@ function ProposalCard({ proposal, actionError, isSubmitting }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ThemeAssistantSession() {
-  const { chatSession, messages, proposals } = useLoaderData();
-  const parent = useRouteLoaderData("routes/theme-assistant");
+  const { apiKey, chatSession, messages, proposals } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
-
-  const apiKey = parent?.apiKey ?? "";
   const isSubmitting = navigation.state !== "idle";
+  const hasProposals = proposals.length > 0;
 
-  // Map proposals by sessionId for easy lookup (only one can be pending per proposal)
   const pendingProposalIds = new Set(
     proposals.filter((p) => p.status === "pending").map((p) => p.id)
   );
 
   return (
     <AppProvider embedded apiKey={apiKey}>
-      <s-page
-        heading={chatSession.title || "Theme Assistant"}
-        back-url="/theme-assistant"
+      {/* Full-viewport flex column */}
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          height: "100vh",
+          fontFamily: "Inter, sans-serif",
+          background: "#f6f6f7",
+        }}
       >
+        {/* ── Header ──────────────────────────────────────────────────────── */}
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 400px",
-            gap: "24px",
-            alignItems: "start",
+            flexShrink: 0,
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+            padding: "0 20px",
+            height: "52px",
+            background: "#fff",
+            borderBottom: "1px solid #e1e3e5",
           }}
         >
-          {/* ── Left: chat ────────────────────────────────────────────────── */}
-          <div>
-            <s-section heading="Conversation">
-              {/* Messages */}
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "12px",
-                  marginBottom: "20px",
-                  maxHeight: "420px",
-                  overflowY: "auto",
-                  padding: "4px",
-                }}
-              >
-                {messages.length === 0 ? (
-                  <p style={{ color: "#6d7175", fontSize: "14px" }}>
-                    Describe the theme change you want to make.
-                  </p>
-                ) : (
-                  messages.map((msg) => (
+          <a
+            href="/"
+            style={{
+              fontSize: "13px",
+              color: "#6d7175",
+              textDecoration: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: "4px",
+            }}
+          >
+            ← Back
+          </a>
+          <span style={{ color: "#e1e3e5" }}>|</span>
+          <span style={{ fontSize: "15px", fontWeight: 600, color: "#202223" }}>
+            {chatSession.title || "Theme Assistant"}
+          </span>
+        </div>
+
+        {/* ── Body ────────────────────────────────────────────────────────── */}
+        <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+
+          {/* ── Chat column ─────────────────────────────────────────────── */}
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+              background: "#fff",
+              borderRight: hasProposals ? "1px solid #e1e3e5" : "none",
+            }}
+          >
+            {/* Messages */}
+            <div
+              style={{
+                flex: 1,
+                overflowY: "auto",
+                padding: "24px 28px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "12px",
+              }}
+            >
+              {messages.length === 0 ? (
+                <p style={{ color: "#6d7175", fontSize: "14px", margin: 0 }}>
+                  Describe the theme change you want to make.
+                  <br />
+                  <span style={{ fontSize: "13px" }}>
+                    Try: <em>"Add a sale banner to the homepage"</em>
+                  </span>
+                </p>
+              ) : (
+                messages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    style={{
+                      display: "flex",
+                      justifyContent: msg.role === "user" ? "flex-end" : "flex-start",
+                    }}
+                  >
                     <div
-                      key={msg.id}
                       style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems:
-                          msg.role === "user" ? "flex-end" : "flex-start",
+                        maxWidth: "72%",
+                        padding: "10px 14px",
+                        borderRadius:
+                          msg.role === "user"
+                            ? "18px 18px 4px 18px"
+                            : "18px 18px 18px 4px",
+                        background: msg.role === "user" ? "#008060" : "#f0f0f1",
+                        color: msg.role === "user" ? "#fff" : "#202223",
+                        fontSize: "14px",
+                        lineHeight: "1.55",
                       }}
                     >
-                      <div
-                        style={{
-                          maxWidth: "80%",
-                          padding: "10px 14px",
-                          borderRadius:
-                            msg.role === "user"
-                              ? "18px 18px 4px 18px"
-                              : "18px 18px 18px 4px",
-                          background:
-                            msg.role === "user" ? "#008060" : "#f6f6f7",
-                          color: msg.role === "user" ? "#fff" : "inherit",
-                          fontSize: "14px",
-                          lineHeight: "1.5",
-                        }}
-                      >
-                        {msg.content}
-                      </div>
+                      {msg.content}
                     </div>
-                  ))
-                )}
-              </div>
+                  </div>
+                ))
+              )}
+            </div>
 
-              {/* Message input */}
+            {/* Input bar — pinned to bottom */}
+            <div
+              style={{
+                flexShrink: 0,
+                padding: "14px 20px",
+                borderTop: "1px solid #e1e3e5",
+                background: "#fff",
+              }}
+            >
               <Form method="post">
                 <input type="hidden" name="intent" value="send_message" />
-                <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
+                <div style={{ display: "flex", gap: "10px", alignItems: "flex-end" }}>
                   <textarea
                     name="message"
-                    placeholder='Try: "Add a sale banner to the homepage"'
-                    rows={3}
+                    placeholder='Describe a theme change, e.g. "Add a sale banner to the homepage"'
+                    rows={2}
                     required
                     style={{
                       flex: 1,
-                      padding: "10px 12px",
+                      padding: "10px 14px",
                       fontSize: "14px",
                       border: "1px solid #c9cccf",
-                      borderRadius: "8px",
-                      resize: "vertical",
+                      borderRadius: "10px",
+                      resize: "none",
                       fontFamily: "inherit",
+                      lineHeight: "1.5",
+                      outline: "none",
                     }}
                   />
                   <button
                     type="submit"
                     disabled={isSubmitting}
                     style={{
-                      padding: "10px 20px",
-                      background: "#008060",
+                      padding: "10px 22px",
+                      background: isSubmitting ? "#95c4b8" : "#008060",
                       color: "#fff",
                       border: "none",
-                      borderRadius: "8px",
+                      borderRadius: "10px",
                       fontWeight: 600,
                       cursor: isSubmitting ? "not-allowed" : "pointer",
                       fontSize: "14px",
-                      height: "fit-content",
+                      whiteSpace: "nowrap",
+                      transition: "background 0.15s",
                     }}
                   >
                     {isSubmitting ? "…" : "Send"}
                   </button>
                 </div>
               </Form>
-            </s-section>
+            </div>
           </div>
 
-          {/* ── Right: proposals ──────────────────────────────────────────── */}
-          <div>
-            <s-section heading="Proposals">
-              {proposals.length === 0 ? (
-                <p style={{ color: "#6d7175", fontSize: "14px" }}>
-                  No proposals yet. Send a message to get started.
-                </p>
-              ) : (
-                proposals.map((proposal) => (
-                  <ProposalCard
-                    key={proposal.id}
-                    proposal={proposal}
-                    actionError={
-                      pendingProposalIds.has(proposal.id)
-                        ? actionData?.error
-                        : null
-                    }
-                    isSubmitting={isSubmitting}
-                  />
-                ))
-              )}
-            </s-section>
-          </div>
+          {/* ── Proposals sidebar ───────────────────────────────────────── */}
+          {hasProposals && (
+            <div
+              style={{
+                width: "460px",
+                flexShrink: 0,
+                overflowY: "auto",
+                padding: "20px",
+                background: "#f6f6f7",
+              }}
+            >
+              <p
+                style={{
+                  fontSize: "13px",
+                  fontWeight: 600,
+                  color: "#6d7175",
+                  margin: "0 0 14px",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.04em",
+                }}
+              >
+                Proposals
+              </p>
+              {proposals.map((proposal) => (
+                <ProposalCard
+                  key={proposal.id}
+                  proposal={proposal}
+                  actionError={
+                    pendingProposalIds.has(proposal.id) ? actionData?.error : null
+                  }
+                  isSubmitting={isSubmitting}
+                />
+              ))}
+            </div>
+          )}
         </div>
-      </s-page>
+      </div>
     </AppProvider>
   );
 }
