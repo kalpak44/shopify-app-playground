@@ -1,15 +1,24 @@
-import { useLoaderData, useRouteError } from "react-router";
+import { redirect, useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { authenticate } from "../shopify.server";
 
 export const loader = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  try {
+    const { session } = await authenticate.admin(request);
 
-  return {
-    apiKey: process.env.SHOPIFY_API_KEY || "",
-    shop: session.shop,
-  };
+    return {
+      apiKey: process.env.SHOPIFY_API_KEY || "",
+      shop: session.shop,
+    };
+  } catch (error) {
+    // When accessed without Shopify context (no session, no ?shop= param),
+    // authenticate.admin throws 410. Redirect to the manual login page instead.
+    if (error instanceof Response && error.status === 410) {
+      throw redirect("/auth/login");
+    }
+    throw error;
+  }
 };
 
 export default function Index() {
