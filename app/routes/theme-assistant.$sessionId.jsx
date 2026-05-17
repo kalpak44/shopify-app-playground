@@ -1,7 +1,9 @@
+import { useEffect, useRef, useState } from "react";
 import {
   redirect,
   useLoaderData,
   useNavigation,
+  useRevalidator,
   useRouteError,
   Form,
   Link,
@@ -11,7 +13,6 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { generateProposal } from "../proposal.server";
 import { readThemeFile, writeThemeFile } from "../theme.server";
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
@@ -49,14 +50,13 @@ export const loader = async ({ request, params }) => {
   };
 };
 
-// ─── Action ──────────────────────────────────────────────────────────────────
+// ─── Action (approve / reject only) ─────────────────────────────────────────
 
 export const action = async ({ request, params }) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
   const { sessionId } = params;
 
-  // Verify session ownership before any mutation
   const chatSession = await prisma.themeChangeSession.findFirst({
     where: { id: sessionId, shop },
   });
@@ -67,51 +67,6 @@ export const action = async ({ request, params }) => {
 
   const formData = await request.formData();
   const intent = formData.get("intent");
-
-  // ── send_message ────────────────────────────────────────────────────────────
-  if (intent === "send_message") {
-    const content = (formData.get("message") ?? "").toString().trim();
-    if (!content) return null;
-
-    await prisma.themeChangeMessage.create({
-      data: { sessionId, role: "user", content },
-    });
-
-    const result = await generateProposal(admin, content);
-
-    if (result.type === "proposal") {
-      const [proposal] = await Promise.all([
-        prisma.themeChangeProposal.create({
-          data: {
-            sessionId,
-            shop,
-            themeId: result.themeId,
-            status: "pending",
-            summary: result.summary,
-            files: result.files,
-          },
-        }),
-        prisma.themeChangeMessage.create({
-          data: {
-            sessionId,
-            role: "assistant",
-            content: `I've reviewed your active theme "${result.themeName}" and created a proposal. Please review the diff below and approve or reject the change.`,
-          },
-        }),
-      ]);
-      void proposal; // used via DB read on next load
-    } else {
-      await prisma.themeChangeMessage.create({
-        data: {
-          sessionId,
-          role: "assistant",
-          content: result.message,
-        },
-      });
-    }
-
-    throw redirect(`/theme-assistant/${sessionId}`);
-  }
 
   // ── approve_proposal ────────────────────────────────────────────────────────
   if (intent === "approve_proposal") {
@@ -129,25 +84,21 @@ export const action = async ({ request, params }) => {
 
     const files = proposal.files;
 
-    // Re-read each file and check for conflicts before writing anything
     for (const file of files) {
       let current;
       try {
         current = await readThemeFile(admin, proposal.themeId, file.path);
       } catch (err) {
-        return {
-          error: `Could not re-read ${file.path} before applying: ${err.message}`,
-        };
+        return { error: `Could not re-read ${file.path}: ${err.message}` };
       }
 
       if (current === null || current.trim() !== file.before.trim()) {
         return {
-          error: `Conflict: ${file.path} has changed since this proposal was created. Reject this proposal and start a new session.`,
+          error: `Conflict: ${file.path} has changed since this proposal was created. Reject and start a new session.`,
         };
       }
     }
 
-    // All clear — write files
     for (const file of files) {
       try {
         await writeThemeFile(admin, proposal.themeId, file.path, file.after);
@@ -337,13 +288,7 @@ function ProposalCard({ proposal, actionError, isSubmitting }) {
 
         {/* Approve / Reject */}
         {isPending && (
-          <div
-            style={{
-              display: "flex",
-              gap: "10px",
-              marginTop: "16px",
-            }}
-          >
+          <div style={{ display: "flex", gap: "10px", marginTop: "16px" }}>
             <Form method="post">
               <input type="hidden" name="intent" value="approve_proposal" />
               <input type="hidden" name="proposalId" value={proposal.id} />
@@ -397,12 +342,96 @@ export default function ThemeAssistantSession() {
   const { apiKey, chatSession, messages, proposals } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
-  const isSubmitting = navigation.state !== "idle";
+  const revalidator = useRevalidator();
+
+  const isFormSubmitting = navigation.state !== "idle";
   const hasProposals = proposals.length > 0;
+
+  // Streaming state
+  const [isSending, setIsSending] = useState(false);
+  const [pendingUserMessage, setPendingUserMessage] = useState(null);
+  const [streamingText, setStreamingText] = useState(null);
+
+  const textareaRef = useRef(null);
+  const scrollRef = useRef(null);
+  // Set to true when we trigger revalidation after streaming finishes
+  const waitingRevalidateRef = useRef(false);
+
+  // Auto-scroll messages to bottom whenever content changes
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages, streamingText, pendingUserMessage]);
+
+  // Clear streaming state once the revalidation we triggered has completed
+  useEffect(() => {
+    if (waitingRevalidateRef.current && revalidator.state === "idle") {
+      waitingRevalidateRef.current = false;
+      setPendingUserMessage(null);
+      setStreamingText(null);
+    }
+  }, [revalidator.state]);
 
   const pendingProposalIds = new Set(
     proposals.filter((p) => p.status === "pending").map((p) => p.id)
   );
+
+  const handleSend = async (e) => {
+    e.preventDefault();
+    const message = textareaRef.current?.value.trim();
+    if (!message || isSending) return;
+
+    textareaRef.current.value = "";
+    setPendingUserMessage(message);
+    setStreamingText("");
+    setIsSending(true);
+
+    try {
+      const resp = await fetch(`/api/chat/${chatSession.id}`, {
+        method: "POST",
+        body: new URLSearchParams({ message }),
+      });
+
+      if (!resp.ok || !resp.body) {
+        throw new Error(`Request failed: ${resp.status}`);
+      }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const evt = JSON.parse(line.slice(6));
+            if (evt.type === "chunk") {
+              setStreamingText((t) => t + evt.text);
+            } else if (evt.type === "done") {
+              setIsSending(false);
+              waitingRevalidateRef.current = true;
+              revalidator.revalidate();
+            }
+          } catch {
+            // ignore malformed SSE line
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Stream error:", err);
+      setIsSending(false);
+      waitingRevalidateRef.current = true;
+      revalidator.revalidate();
+    }
+  };
 
   return (
     <AppProvider embedded apiKey={apiKey}>
@@ -464,6 +493,7 @@ export default function ThemeAssistantSession() {
           >
             {/* Messages */}
             <div
+              ref={scrollRef}
               style={{
                 flex: 1,
                 overflowY: "auto",
@@ -473,7 +503,7 @@ export default function ThemeAssistantSession() {
                 gap: "12px",
               }}
             >
-              {messages.length === 0 ? (
+              {messages.length === 0 && pendingUserMessage === null ? (
                 <p style={{ color: "#6d7175", fontSize: "14px", margin: 0 }}>
                   Describe the theme change you want to make.
                   <br />
@@ -482,32 +512,85 @@ export default function ThemeAssistantSession() {
                   </span>
                 </p>
               ) : (
-                messages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    style={{
-                      display: "flex",
-                      justifyContent: msg.role === "user" ? "flex-end" : "flex-start",
-                    }}
-                  >
+                <>
+                  {messages.map((msg) => (
                     <div
+                      key={msg.id}
                       style={{
-                        maxWidth: "72%",
-                        padding: "10px 14px",
-                        borderRadius:
-                          msg.role === "user"
-                            ? "18px 18px 4px 18px"
-                            : "18px 18px 18px 4px",
-                        background: msg.role === "user" ? "#008060" : "#f0f0f1",
-                        color: msg.role === "user" ? "#fff" : "#202223",
-                        fontSize: "14px",
-                        lineHeight: "1.55",
+                        display: "flex",
+                        justifyContent: msg.role === "user" ? "flex-end" : "flex-start",
                       }}
                     >
-                      {msg.content}
+                      <div
+                        style={{
+                          maxWidth: "72%",
+                          padding: "10px 14px",
+                          borderRadius:
+                            msg.role === "user"
+                              ? "18px 18px 4px 18px"
+                              : "18px 18px 18px 4px",
+                          background: msg.role === "user" ? "#008060" : "#f0f0f1",
+                          color: msg.role === "user" ? "#fff" : "#202223",
+                          fontSize: "14px",
+                          lineHeight: "1.55",
+                        }}
+                      >
+                        {msg.content}
+                      </div>
                     </div>
-                  </div>
-                ))
+                  ))}
+
+                  {/* Optimistic user message */}
+                  {pendingUserMessage !== null && (
+                    <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                      <div
+                        style={{
+                          maxWidth: "72%",
+                          padding: "10px 14px",
+                          borderRadius: "18px 18px 4px 18px",
+                          background: "#008060",
+                          color: "#fff",
+                          fontSize: "14px",
+                          lineHeight: "1.55",
+                        }}
+                      >
+                        {pendingUserMessage}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Streaming assistant reply */}
+                  {streamingText !== null && (
+                    <div style={{ display: "flex", justifyContent: "flex-start" }}>
+                      <div
+                        style={{
+                          maxWidth: "72%",
+                          padding: "10px 14px",
+                          borderRadius: "18px 18px 18px 4px",
+                          background: "#f0f0f1",
+                          color: "#202223",
+                          fontSize: "14px",
+                          lineHeight: "1.55",
+                        }}
+                      >
+                        {streamingText}
+                        {isSending && (
+                          <span
+                            style={{
+                              display: "inline-block",
+                              width: "2px",
+                              height: "14px",
+                              background: "#6d7175",
+                              marginLeft: "2px",
+                              verticalAlign: "text-bottom",
+                              animation: "blink 1s step-end infinite",
+                            }}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
@@ -520,10 +603,11 @@ export default function ThemeAssistantSession() {
                 background: "#fff",
               }}
             >
-              <Form method="post">
-                <input type="hidden" name="intent" value="send_message" />
+              <style>{`@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }`}</style>
+              <form onSubmit={handleSend}>
                 <div style={{ display: "flex", gap: "10px", alignItems: "stretch" }}>
                   <textarea
+                    ref={textareaRef}
                     name="message"
                     placeholder='Describe a theme change, e.g. "Add a sale banner to the homepage"'
                     rows={2}
@@ -531,7 +615,7 @@ export default function ThemeAssistantSession() {
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && !e.shiftKey) {
                         e.preventDefault();
-                        e.target.form.requestSubmit();
+                        e.currentTarget.form.requestSubmit();
                       }
                     }}
                     style={{
@@ -548,24 +632,24 @@ export default function ThemeAssistantSession() {
                   />
                   <button
                     type="submit"
-                    disabled={isSubmitting}
+                    disabled={isSending}
                     style={{
                       padding: "0 22px",
-                      background: isSubmitting ? "#95c4b8" : "#008060",
+                      background: isSending ? "#95c4b8" : "#008060",
                       color: "#fff",
                       border: "none",
                       borderRadius: "10px",
                       fontWeight: 600,
-                      cursor: isSubmitting ? "not-allowed" : "pointer",
+                      cursor: isSending ? "not-allowed" : "pointer",
                       fontSize: "14px",
                       whiteSpace: "nowrap",
                       transition: "background 0.15s",
                     }}
                   >
-                    {isSubmitting ? "…" : "Send"}
+                    {isSending ? "…" : "Send"}
                   </button>
                 </div>
-              </Form>
+              </form>
             </div>
           </div>
 
@@ -599,7 +683,7 @@ export default function ThemeAssistantSession() {
                   actionError={
                     pendingProposalIds.has(proposal.id) ? actionData?.error : null
                   }
-                  isSubmitting={isSubmitting}
+                  isSubmitting={isFormSubmitting}
                 />
               ))}
             </div>
