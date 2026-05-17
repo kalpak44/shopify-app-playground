@@ -17,7 +17,7 @@ redirect_urls = [
 api_version = "2025-10"
 
 [access_scopes]
-scopes = "write_products"
+scopes = "read_themes,write_themes"
 
 [build]
 include_config_on_deploy = true

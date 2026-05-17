@@ -25,3 +25,47 @@ model Session {
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
+
+model ThemeChangeSession {
+  id        String   @id @default(cuid())
+  shop      String
+  title     String?
+  status    String   @default("open")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages  ThemeChangeMessage[]
+  proposals ThemeChangeProposal[]
+
+  @@index([shop])
+}
+
+model ThemeChangeMessage {
+  id        String   @id @default(cuid())
+  sessionId String
+  role      String
+  content   String
+  createdAt DateTime @default(now())
+
+  session ThemeChangeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+}
+
+model ThemeChangeProposal {
+  id        String   @id @default(cuid())
+  sessionId String
+  shop      String
+  themeId   String
+  status    String   @default("pending")
+  summary   String
+  files     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  session ThemeChangeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([shop])
+  @@index([sessionId])
+  @@index([shop, status])
+}
