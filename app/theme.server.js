@@ -1,5 +1,3 @@
-const ALLOWED_FILES = new Set(["templates/index.json"]);
-
 const GET_THEMES_QUERY = `#graphql
   query GetThemes {
     themes(first: 20) {
@@ -91,6 +89,39 @@ export async function readThemeFile(admin, themeId, path) {
   }
 
   return fileNode.body?.content ?? null;
+}
+
+export async function listThemeFiles(admin, themeId, prefix = null) {
+  const query = `#graphql
+    query ListThemeFiles($themeId: ID!, $cursor: String) {
+      theme(id: $themeId) {
+        files(first: 250, after: $cursor) {
+          edges {
+            node { filename }
+            cursor
+          }
+          pageInfo { hasNextPage endCursor }
+          userErrors { code filename }
+        }
+      }
+    }
+  `;
+
+  let allFilenames = [];
+  let cursor = null;
+
+  do {
+    const response = await admin.graphql(query, { variables: { themeId, cursor } });
+    const { data, errors } = await response.json();
+    if (errors?.length) throw new Error(`Failed to list theme files: ${errors[0].message}`);
+
+    const files = data?.theme?.files;
+    (files?.edges ?? []).forEach((e) => allFilenames.push(e.node.filename));
+
+    cursor = files?.pageInfo?.hasNextPage ? files.pageInfo.endCursor : null;
+  } while (cursor);
+
+  return prefix ? allFilenames.filter((f) => f.startsWith(prefix)) : allFilenames;
 }
 
 export async function writeThemeFile(admin, themeId, path, content) {

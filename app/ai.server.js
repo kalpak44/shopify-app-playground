@@ -1,13 +1,31 @@
-const SYSTEM_PROMPT = `You are a helpful AI assistant embedded in a Shopify admin app called Theme Assistant.
+function buildSystemPrompt(scopes) {
+  const scopeList = (scopes ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  const canRead  = scopeList.length === 0 || scopeList.includes("read_themes");
+  const canWrite = scopeList.length === 0 || scopeList.includes("write_themes");
+
+  const permLines = [
+    `Granted OAuth scopes: ${scopeList.length ? scopeList.join(", ") : "unknown (assume full access)"}`,
+    !canRead  && "⚠️ read_themes is NOT granted — do not attempt to list or read theme files. Inform the merchant and suggest they check the app's permissions in the Shopify Partner dashboard.",
+    !canWrite && "⚠️ write_themes is NOT granted — do not propose file changes. Instead guide the merchant to apply changes manually via the Theme Editor (Online Store → Themes → Edit code) or the Shopify CLI (`shopify theme push`).",
+  ].filter(Boolean).join("\n");
+
+  return `You are a helpful AI assistant embedded in a Shopify admin app called Theme Assistant.
 You help merchants understand and modify their Shopify themes.
 You have access to tools that let you read theme files and propose changes.
 
+${permLines}
+
 Rules:
 - Always respond in Markdown. Use code blocks for file content or code snippets.
+- Before doing anything, verify you have the required permissions above — never call a tool you don't have scope for.
+- When asked about theme structure, sections, blocks, or settings: call list_theme_files first (with the relevant prefix like 'sections/', 'templates/', 'config/') to discover what exists, then read specific files as needed.
+- Section settings and blocks are defined in the {% schema %} tag inside each .liquid file — read the section file to understand its schema.
+- Global theme settings are in config/settings_schema.json; current values are in config/settings_data.json.
 - Always read the relevant file before proposing a change so your proposal reflects the actual current state.
 - When proposing a change, provide the complete new file content (not a diff) to propose_file_change.
 - Keep explanations concise and practical — one short paragraph is usually enough.
 - If the merchant asks what a file contains, read it and show the relevant parts in a code block.`;
+}
 
 // ─── Normalized tool definitions ─────────────────────────────────────────────
 
@@ -16,6 +34,22 @@ const TOOL_DEFS = [
     name: "get_active_theme",
     description: "Get the name and ID of the merchant's currently active Shopify theme.",
     parameters: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "list_theme_files",
+    description:
+      "List filenames in the active Shopify theme. Optionally filter by a directory prefix such as 'sections/', 'templates/', 'snippets/', 'assets/', 'config/', 'layout/', or 'locales/'. Returns filenames only — use read_theme_file to get the content of a specific file. Call this first to discover what sections, templates, and other files exist before reading or modifying them.",
+    parameters: {
+      type: "object",
+      properties: {
+        prefix: {
+          type: "string",
+          description:
+            "Optional path prefix to filter results, e.g. 'sections/', 'templates/', 'config/'. Omit to list all files.",
+        },
+      },
+      required: [],
+    },
   },
   {
     name: "read_theme_file",
@@ -138,10 +172,10 @@ async function streamOpenAITurn({
 }
 
 async function runOpenAIAgentLoop({
-  baseUrl, apiToken, modelName, history, executeTool, onChunk, onStatus, isCancelled,
+  baseUrl, apiToken, modelName, scopes, history, executeTool, onChunk, onStatus, isCancelled,
 }) {
   const messages = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: buildSystemPrompt(scopes) },
     ...history.map((m) => ({ role: m.role, content: m.content })),
   ];
   const tools = TOOL_DEFS.map((t) => ({
@@ -256,7 +290,7 @@ async function streamAnthropicTurn({
 }
 
 async function runAnthropicAgentLoop({
-  baseUrl, apiToken, modelName, history, executeTool, onChunk, onStatus, isCancelled,
+  baseUrl, apiToken, modelName, scopes, history, executeTool, onChunk, onStatus, isCancelled,
 }) {
   const messages = history
     .filter((m) => m.role !== "system")
@@ -269,7 +303,7 @@ async function runAnthropicAgentLoop({
 
   for (let turn = 0; turn < 8; turn++) {
     const { textContent, toolUses } = await streamAnthropicTurn({
-      baseUrl, apiToken, modelName, systemMsg: SYSTEM_PROMPT,
+      baseUrl, apiToken, modelName, systemMsg: buildSystemPrompt(scopes),
       messages, tools, onChunk, isCancelled,
     });
 
@@ -310,6 +344,7 @@ async function runAnthropicAgentLoop({
 
 export async function runAgentLoop({
   config,
+  scopes,
   history,
   executeTool,
   onChunk,
@@ -321,13 +356,13 @@ export async function runAgentLoop({
 
   if (config.provider === "anthropic") {
     return runAnthropicAgentLoop({
-      baseUrl, apiToken: config.apiToken, modelName,
+      baseUrl, apiToken: config.apiToken, modelName, scopes,
       history, executeTool, onChunk, onStatus, isCancelled,
     });
   }
 
   return runOpenAIAgentLoop({
-    baseUrl, apiToken: config.apiToken, modelName,
+    baseUrl, apiToken: config.apiToken, modelName, scopes,
     history, executeTool, onChunk, onStatus, isCancelled,
   });
 }

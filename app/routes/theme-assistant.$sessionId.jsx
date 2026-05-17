@@ -116,6 +116,7 @@ export const action = async ({ request, params }) => {
           try {
             aiResponse = await runAgentLoop({
               config,
+              scopes: session.scope,
               history,
               executeTool: async (name, args) => {
                 if (name === "get_active_theme") return { id: proposal.themeId, name: "active theme" };

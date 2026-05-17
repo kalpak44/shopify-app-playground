@@ -1,7 +1,7 @@
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { runAgentLoop } from "../ai.server";
-import { getMainTheme, readThemeFile } from "../theme.server";
+import { getMainTheme, readThemeFile, listThemeFiles } from "../theme.server";
 import { generateUnifiedDiff } from "../diff.server";
 
 const NO_CONFIG_MSG =
@@ -9,6 +9,7 @@ const NO_CONFIG_MSG =
 
 const TOOL_STATUS = {
   get_active_theme: "Checking active theme…",
+  list_theme_files: "Listing theme files…",
   read_theme_file: "Reading theme file…",
   propose_file_change: "Creating proposal…",
 };
@@ -65,6 +66,12 @@ export const action = async ({ request, params }) => {
           return { id: theme.id, name: theme.name };
         }
 
+        if (name === "list_theme_files") {
+          const theme = await getTheme();
+          const files = await listThemeFiles(admin, theme.id, args.prefix ?? null);
+          return files;
+        }
+
         if (name === "read_theme_file") {
           const theme = await getTheme();
           const fileContent = await readThemeFile(admin, theme.id, args.path);
@@ -117,6 +124,7 @@ export const action = async ({ request, params }) => {
         try {
           fullText = await runAgentLoop({
             config,
+            scopes: session.scope,
             history,
             executeTool,
             onChunk: (text) => send({ type: "chunk", text }),
