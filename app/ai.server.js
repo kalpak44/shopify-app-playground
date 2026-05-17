@@ -12,7 +12,7 @@ function buildSystemPrompt(scopes) {
     !canWriteThemes && "⚠️ Theme write access not granted — do not propose theme file changes; guide the merchant to use the Theme Editor or Shopify CLI instead.",
   ].filter(Boolean).join("\n");
 
-  return `You are a helpful AI assistant embedded in a Shopify admin app called Theme Assistant.
+  return `You are a helpful AI assistant embedded in a Shopify admin app called Assistant GPT.
 You help merchants manage their entire Shopify store — themes, orders, products, customers, discounts, metaobjects, markets, finances, analytics, and more.
 You have access to tools that let you read and modify theme files, and run any Shopify Admin GraphQL query or mutation.
 

@@ -1,5 +1,5 @@
 // Lightweight markdown renderer — no external dependencies.
-// Handles: fenced code blocks, headings, bullet lists, bold, italic, inline code, hr.
+// Handles: fenced code blocks, headings, bullet lists, ordered lists, tables, bold, italic, inline code, hr.
 
 const INLINE_CODE = {
   background: "#f0f0f1",
@@ -21,6 +21,51 @@ const CODE_BLOCK = {
   margin: "10px 0",
   lineHeight: "1.55",
 };
+
+const TH_STYLE = {
+  background: "#f6f6f7",
+  border: "1px solid #e1e3e5",
+  padding: "8px 12px",
+  fontWeight: 600,
+  color: "#202223",
+  whiteSpace: "nowrap",
+};
+
+const TD_STYLE = {
+  border: "1px solid #e1e3e5",
+  padding: "7px 12px",
+  color: "#202223",
+  verticalAlign: "top",
+};
+
+function parseTableRow(line) {
+  return line
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => cell.trim());
+}
+
+function columnAligns(separatorLine) {
+  return separatorLine
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => {
+      cell = cell.trim();
+      if (cell.startsWith(":") && cell.endsWith(":")) return "center";
+      if (cell.endsWith(":")) return "right";
+      return "left";
+    });
+}
+
+function isTableRow(line) {
+  return line.startsWith("|") && line.includes("|", 1);
+}
+
+function isSeparatorRow(line) {
+  return /^\|[-:| ]+\|$/.test(line.trim());
+}
 
 function renderInline(text, keyPrefix) {
   const parts = [];
@@ -90,6 +135,50 @@ export function Markdown({ children }) {
       continue;
     }
 
+    // ── Table ─────────────────────────────────────────────────────────────
+    if (isTableRow(line) && i + 1 < lines.length && isSeparatorRow(lines[i + 1])) {
+      const headers = parseTableRow(line);
+      const aligns = columnAligns(lines[i + 1]);
+      i += 2; // skip header + separator
+
+      const rows = [];
+      while (i < lines.length && isTableRow(lines[i])) {
+        rows.push(parseTableRow(lines[i]));
+        i++;
+      }
+
+      elements.push(
+        <div key={ek++} style={{ overflowX: "auto", margin: "10px 0" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+            <thead>
+              <tr>
+                {headers.map((h, hi) => (
+                  <th key={hi} style={{ ...TH_STYLE, textAlign: aligns[hi] ?? "left" }}>
+                    {renderInline(h, `th-${ek}-${hi}`)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, ri) => (
+                <tr
+                  key={ri}
+                  style={{ background: ri % 2 === 1 ? "#fafbfc" : "transparent" }}
+                >
+                  {row.map((cell, ci) => (
+                    <td key={ci} style={{ ...TD_STYLE, textAlign: aligns[ci] ?? "left" }}>
+                      {renderInline(cell, `td-${ek}-${ri}-${ci}`)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+      continue;
+    }
+
     // ── Unordered list ────────────────────────────────────────────────────
     if (line.match(/^[-*+] /)) {
       const items = [];
@@ -148,7 +237,8 @@ export function Markdown({ children }) {
       !lines[i].match(/^#{1,6} /) &&
       !lines[i].match(/^[-*+] /) &&
       !lines[i].match(/^\d+\. /) &&
-      !lines[i].match(/^(---+|\*\*\*+|___+)$/)
+      !lines[i].match(/^(---+|\*\*\*+|___+)$/) &&
+      !(isTableRow(lines[i]) && i + 1 < lines.length && isSeparatorRow(lines[i + 1]))
     ) {
       paraLines.push(lines[i]);
       i++;

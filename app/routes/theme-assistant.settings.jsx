@@ -109,7 +109,7 @@ export default function ThemeAssistantSettings() {
             to="/"
             style={{ fontSize: "13px", color: "#6d7175", textDecoration: "none" }}
           >
-            ← Theme Assistant
+            ← Assistant GPT
           </Link>
           <span style={{ color: "#e1e3e5" }}>|</span>
           <h1 style={{ fontSize: "22px", fontWeight: 600, margin: 0 }}>

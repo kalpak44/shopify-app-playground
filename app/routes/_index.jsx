@@ -67,10 +67,10 @@ export default function Index() {
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "28px" }}>
           <div>
             <h1 style={{ margin: "0 0 4px", fontSize: "20px", fontWeight: 650, color: "#202223" }}>
-              Theme Assistant
+              Assistant GPT
             </h1>
             <p style={{ margin: 0, fontSize: "14px", color: "#6d7175" }}>
-              Propose and apply changes to your active Shopify theme.
+              Manage your Shopify store with AI — themes, orders, products, customers, and more.
             </p>
           </div>
           <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>

@@ -500,7 +500,7 @@ export default function ThemeAssistantSession() {
           </Link>
           <span style={{ color: "#e1e3e5" }}>|</span>
           <span style={{ fontSize: "15px", fontWeight: 600, color: "#202223" }}>
-            {chatSession.title || "Theme Assistant"}
+            {chatSession.title || "Assistant GPT"}
           </span>
         </div>
 
@@ -518,7 +518,7 @@ export default function ThemeAssistantSession() {
             {messages.length === 0 && pendingUserMessage === null && (
               <div style={{ color: "#6d7175", fontSize: "14px", textAlign: "center", padding: "40px 0" }}>
                 <div style={{ fontSize: "28px", marginBottom: "12px" }}>🎨</div>
-                <p style={{ margin: "0 0 6px", fontWeight: 500, color: "#202223" }}>Theme Assistant</p>
+                <p style={{ margin: "0 0 6px", fontWeight: 500, color: "#202223" }}>Assistant GPT</p>
                 <p style={{ margin: 0, fontSize: "13px" }}>
                   Ask me to read or modify your active Shopify theme.
                 </p>
