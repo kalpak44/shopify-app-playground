@@ -354,6 +354,8 @@ export async function runAgentLoop({
   const baseUrl = config.baseUrl ?? "https://api.openai.com/v1";
   const modelName = config.modelName ?? "gpt-4o";
 
+  console.log("[AI] System prompt:\n" + buildSystemPrompt(scopes));
+
   if (config.provider === "anthropic") {
     return runAnthropicAgentLoop({
       baseUrl, apiToken: config.apiToken, modelName, scopes,
