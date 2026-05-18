@@ -45,7 +45,16 @@ ${permissionNotes}
   - Note: products are created UNPUBLISHED by default. Call \`publishablePublish\` to make them live.
 - Update: \`mutation UpdateProduct { productUpdate(input: { id, title, descriptionHtml, tags }) { product { id } userErrors { field message } } }\`
 - Add variants to an existing product: use \`productVariantsBulkCreate(productId, variants: [{ price, compareAtPrice, optionValues: [{ name, optionId }] }])\`
-- Update variants: \`productVariantsBulkUpdate(productId, variants: [{ id, price, compareAtPrice }])\`
+- Update variant price/compareAtPrice: ⚠️ \`productVariantUpdate\` does NOT exist — always use \`productVariantsBulkUpdate\`. Full example:
+  \`\`\`graphql
+  mutation UpdateVariantPrices($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+    productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+      productVariants { id price compareAtPrice }
+      userErrors { field message }
+    }
+  }
+  \`\`\`
+  Variables: \`{ "productId": "gid://shopify/Product/123", "variants": [{ "id": "gid://shopify/ProductVariant/456", "price": "29.99", "compareAtPrice": "39.99" }] }\`
 - Publish a product: \`mutation PublishProduct { publishablePublish(id: "gid://shopify/Product/123", input: { publicationId: "gid://shopify/Publication/..." }) { ... } }\`
 
 ### Collections / Categories (read_products / write_products)
