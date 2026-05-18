@@ -24,17 +24,17 @@ export const loader = async ({ request, params }) => {
   const shop = session.shop;
   const { sessionId } = params;
 
-  const chatSession = await prisma.themeChangeSession.findFirst({
+  const chatSession = await prisma.chatSession.findFirst({
     where: { id: sessionId, shop },
   });
   if (!chatSession) throw new Response("Session not found", { status: 404 });
 
   const [messages, proposals] = await Promise.all([
-    prisma.themeChangeMessage.findMany({
+    prisma.chatMessage.findMany({
       where: { sessionId },
       orderBy: { createdAt: "asc" },
     }),
-    prisma.themeChangeProposal.findMany({
+    prisma.changeProposal.findMany({
       where: { sessionId },
       orderBy: { createdAt: "asc" },
     }),
@@ -58,7 +58,7 @@ export const action = async ({ request, params }) => {
   const { accessToken } = session;
   const { sessionId } = params;
 
-  const chatSession = await prisma.themeChangeSession.findFirst({
+  const chatSession = await prisma.chatSession.findFirst({
     where: { id: sessionId, shop },
   });
   if (!chatSession) throw new Response("Session not found", { status: 404 });
@@ -70,7 +70,7 @@ export const action = async ({ request, params }) => {
     const proposalId = formData.get("proposalId")?.toString();
     if (!proposalId) return { error: "Missing proposal ID." };
 
-    const proposal = await prisma.themeChangeProposal.findFirst({
+    const proposal = await prisma.changeProposal.findFirst({
       where: { id: proposalId, shop, sessionId },
     });
     if (!proposal) return { error: "Proposal not found." };
@@ -97,13 +97,13 @@ export const action = async ({ request, params }) => {
       } catch (err) {
         const errorUserMsg = `I tried to apply the proposed change to \`${file.path}\` but it failed with this error: ${err.message}. Can you suggest an alternative approach?`;
 
-        await prisma.themeChangeMessage.create({
+        await prisma.chatMessage.create({
           data: { sessionId, role: "user", content: errorUserMsg },
         });
 
         const [config, history] = await Promise.all([
-          prisma.themeAssistantConfig.findUnique({ where: { shop } }),
-          prisma.themeChangeMessage.findMany({
+          prisma.assistantConfig.findUnique({ where: { shop } }),
+          prisma.chatMessage.findMany({
             where: { sessionId },
             orderBy: { createdAt: "asc" },
             take: 40,
@@ -132,32 +132,32 @@ export const action = async ({ request, params }) => {
           }
         }
 
-        await prisma.themeChangeMessage.create({
+        await prisma.chatMessage.create({
           data: { sessionId, role: "assistant", content: aiResponse },
         });
 
-        throw redirect(`/theme-assistant/${sessionId}`);
+        throw redirect(`/assistant/${sessionId}`);
       }
     }
 
     await Promise.all([
-      prisma.themeChangeProposal.update({
+      prisma.changeProposal.update({
         where: { id: proposalId },
         data: { status: "approved" },
       }),
-      prisma.themeChangeMessage.create({
+      prisma.chatMessage.create({
         data: { sessionId, role: "assistant", content: "Change applied successfully." },
       }),
     ]);
 
-    throw redirect(`/theme-assistant/${sessionId}`);
+    throw redirect(`/assistant/${sessionId}`);
   }
 
   if (intent === "reject_proposal") {
     const proposalId = formData.get("proposalId")?.toString();
     if (!proposalId) return { error: "Missing proposal ID." };
 
-    const proposal = await prisma.themeChangeProposal.findFirst({
+    const proposal = await prisma.changeProposal.findFirst({
       where: { id: proposalId, shop, sessionId },
     });
     if (!proposal) return { error: "Proposal not found." };
@@ -165,16 +165,16 @@ export const action = async ({ request, params }) => {
       return { error: `Proposal is already ${proposal.status}.` };
 
     await Promise.all([
-      prisma.themeChangeProposal.update({
+      prisma.changeProposal.update({
         where: { id: proposalId },
         data: { status: "rejected" },
       }),
-      prisma.themeChangeMessage.create({
+      prisma.chatMessage.create({
         data: { sessionId, role: "assistant", content: "Proposal rejected." },
       }),
     ]);
 
-    throw redirect(`/theme-assistant/${sessionId}`);
+    throw redirect(`/assistant/${sessionId}`);
   }
 
   return null;
@@ -362,7 +362,7 @@ function InlineProposalCard({ proposal, actionError, isSubmitting }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function ThemeAssistantSession() {
+export default function AssistantSession() {
   const { apiKey, chatSession, messages, proposalMap } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
@@ -517,10 +517,10 @@ export default function ThemeAssistantSession() {
 
             {messages.length === 0 && pendingUserMessage === null && (
               <div style={{ color: "#6d7175", fontSize: "14px", textAlign: "center", padding: "40px 0" }}>
-                <div style={{ fontSize: "28px", marginBottom: "12px" }}>🎨</div>
+                <div style={{ fontSize: "28px", marginBottom: "12px" }}>🤖</div>
                 <p style={{ margin: "0 0 6px", fontWeight: 500, color: "#202223" }}>Assistant GPT</p>
                 <p style={{ margin: 0, fontSize: "13px" }}>
-                  Ask me to read or modify your active Shopify theme.
+                  Ask me anything about your store — themes, products, orders, customers, and more.
                 </p>
               </div>
             )}
@@ -610,7 +610,7 @@ export default function ThemeAssistantSession() {
                 <textarea
                   ref={textareaRef}
                   name="message"
-                  placeholder='Ask about your theme, e.g. "Add a sale banner to the homepage"'
+                  placeholder='Ask anything, e.g. "Create a collection for headphones" or "Show my top orders this week"'
                   rows={2}
                   required
                   onKeyDown={(e) => {

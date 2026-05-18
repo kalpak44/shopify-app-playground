@@ -1,25 +1,40 @@
 const API_VERSION = "2025-10";
 
+const TRANSIENT_CODES = new Set(["EAI_AGAIN", "ECONNRESET", "ETIMEDOUT", "ECONNREFUSED"]);
+
+function isTransientNetworkError(err) {
+  return TRANSIENT_CODES.has(err.cause?.code) || TRANSIENT_CODES.has(err.code);
+}
+
 export async function shopifyGraphql(shop, accessToken, query, variables = {}) {
   const operation = query.match(/(?:query|mutation)\s+(\w+)/)?.[1] ?? "anonymous";
   console.log(`[Shopify] ${operation}`, Object.keys(variables).length ? variables : "");
 
+  const MAX_RETRIES = 2;
   let response;
-  try {
-    response = await fetch(
-      `https://${shop}/admin/api/${API_VERSION}/graphql.json`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Shopify-Access-Token": accessToken,
-        },
-        body: JSON.stringify({ query, variables }),
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      response = await fetch(
+        `https://${shop}/admin/api/${API_VERSION}/graphql.json`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Shopify-Access-Token": accessToken,
+          },
+          body: JSON.stringify({ query, variables }),
+        }
+      );
+      break;
+    } catch (err) {
+      if (isTransientNetworkError(err) && attempt < MAX_RETRIES) {
+        console.warn(`[Shopify] ${operation} — transient error (${err.cause?.code ?? err.code}), retrying (${attempt + 1}/${MAX_RETRIES})…`);
+        await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+        continue;
       }
-    );
-  } catch (err) {
-    console.error(`[Shopify] ${operation} — fetch failed:`, err.message, err.cause ?? "");
-    throw err;
+      console.error(`[Shopify] ${operation} — fetch failed:`, err.message, err.cause ?? "");
+      throw err;
+    }
   }
 
   if (!response.ok) {

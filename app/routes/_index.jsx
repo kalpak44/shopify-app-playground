@@ -10,7 +10,7 @@ import prisma from "../db.server";
 export const loader = async ({ request }) => {
   try {
     const { session } = await authenticate.admin(request);
-    const sessions = await prisma.themeChangeSession.findMany({
+    const sessions = await prisma.chatSession.findMany({
       where: { shop: session.shop },
       orderBy: { createdAt: "desc" },
       take: 50,
@@ -34,16 +34,16 @@ export const action = async ({ request }) => {
   const intent = formData.get("intent");
 
   if (intent === "new_session") {
-    const created = await prisma.themeChangeSession.create({
+    const created = await prisma.chatSession.create({
       data: { shop, title: "New session", status: "open" },
     });
-    throw redirect(`/theme-assistant/${created.id}`);
+    throw redirect(`/assistant/${created.id}`);
   }
 
   if (intent === "delete_session") {
     const sessionId = formData.get("sessionId")?.toString();
     if (sessionId) {
-      await prisma.themeChangeSession.deleteMany({
+      await prisma.chatSession.deleteMany({
         where: { id: sessionId, shop },
       });
     }
@@ -75,7 +75,7 @@ export default function Index() {
           </div>
           <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
             <Link
-              to="/theme-assistant/settings"
+              to="/assistant/settings"
               style={{
                 padding: "8px 14px",
                 fontSize: "14px",
@@ -187,7 +187,7 @@ export default function Index() {
                   /* ── Normal row ── */
                   <div style={{ display: "flex", alignItems: "center" }}>
                     <Link
-                      to={`/theme-assistant/${s.id}`}
+                      to={`/assistant/${s.id}`}
                       style={{
                         flex: 1,
                         display: "flex",

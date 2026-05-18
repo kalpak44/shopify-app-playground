@@ -29,7 +29,7 @@ export const action = async ({ request, params }) => {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  const chatSession = await prisma.themeChangeSession.findFirst({
+  const chatSession = await prisma.chatSession.findFirst({
     where: { id: sessionId, shop },
   });
   if (!chatSession) return new Response("Not found", { status: 404 });
@@ -39,13 +39,13 @@ export const action = async ({ request, params }) => {
   if (!content) return new Response("Bad request", { status: 400 });
 
   // Persist user message first so it appears in the history sent to the AI
-  await prisma.themeChangeMessage.create({
+  await prisma.chatMessage.create({
     data: { sessionId, role: "user", content },
   });
 
   const [config, history] = await Promise.all([
-    prisma.themeAssistantConfig.findUnique({ where: { shop } }),
-    prisma.themeChangeMessage.findMany({
+    prisma.assistantConfig.findUnique({ where: { shop } }),
+    prisma.chatMessage.findMany({
       where: { sessionId },
       orderBy: { createdAt: "asc" },
       take: 40,
@@ -94,7 +94,7 @@ export const action = async ({ request, params }) => {
           const before = (await readThemeFile(shop, accessToken, theme.id, args.path)) ?? "";
           const diff = generateUnifiedDiff(before, args.new_content, args.path);
 
-          const proposal = await prisma.themeChangeProposal.create({
+          const proposal = await prisma.changeProposal.create({
             data: {
               sessionId,
               shop,
@@ -161,7 +161,7 @@ export const action = async ({ request, params }) => {
         }
       }
 
-      await prisma.themeChangeMessage.create({
+      await prisma.chatMessage.create({
         data: { sessionId, role: "assistant", content: fullText, proposalId: createdProposalId },
       });
 

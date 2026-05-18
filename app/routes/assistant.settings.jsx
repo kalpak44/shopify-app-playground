@@ -8,7 +8,7 @@ import prisma from "../db.server";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
-  const config = await prisma.themeAssistantConfig.findUnique({
+  const config = await prisma.assistantConfig.findUnique({
     where: { shop: session.shop },
   });
   return {
@@ -29,7 +29,7 @@ export const action = async ({ request }) => {
   const apiToken  = (formData.get("apiToken")  ?? "").toString().trim() || null;
   const modelName = (formData.get("modelName") ?? "").toString().trim() || null;
 
-  await prisma.themeAssistantConfig.upsert({
+  await prisma.assistantConfig.upsert({
     where: { shop },
     create: { shop, provider, baseUrl, apiToken, modelName },
     update: { provider, baseUrl, apiToken, modelName },
@@ -94,7 +94,7 @@ const inputStyle = {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function ThemeAssistantSettings() {
+export default function AssistantSettings() {
   const { apiKey, config } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();

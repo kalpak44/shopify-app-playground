@@ -26,7 +26,7 @@ model Session {
   refreshTokenExpires DateTime?
 }
 
-model ThemeChangeSession {
+model ChatSession {
   id        String   @id @default(cuid())
   shop      String
   title     String?
@@ -34,13 +34,14 @@ model ThemeChangeSession {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  messages  ThemeChangeMessage[]
-  proposals ThemeChangeProposal[]
+  messages  ChatMessage[]
+  proposals ChangeProposal[]
 
   @@index([shop])
+  @@map("ThemeChangeSession")
 }
 
-model ThemeChangeMessage {
+model ChatMessage {
   id         String   @id @default(cuid())
   sessionId  String
   role       String
@@ -48,12 +49,13 @@ model ThemeChangeMessage {
   proposalId String?
   createdAt  DateTime @default(now())
 
-  session ThemeChangeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId])
+  @@map("ThemeChangeMessage")
 }
 
-model ThemeChangeProposal {
+model ChangeProposal {
   id        String   @id @default(cuid())
   sessionId String
   shop      String
@@ -64,14 +66,15 @@ model ThemeChangeProposal {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  session ThemeChangeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([shop])
   @@index([sessionId])
   @@index([shop, status])
+  @@map("ThemeChangeProposal")
 }
 
-model ThemeAssistantConfig {
+model AssistantConfig {
   id        String   @id @default(cuid())
   shop      String   @unique
   provider  String   @default("openai")
@@ -80,4 +83,6 @@ model ThemeAssistantConfig {
   modelName String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@map("ThemeAssistantConfig")
 }
