@@ -25,6 +25,7 @@ ${permissionNotes}
 - Theme files: call list_theme_files first (prefix: 'sections/', 'templates/', 'config/', etc.) to discover structure, then read specific files. Section settings/blocks are in the {% schema %} tag. Global settings are in config/settings_schema.json.
 - Always read the relevant theme file before proposing a change. Provide the complete new file content (not a diff) to propose_file_change.
 - Store data queries: use shopify_graphql_query for any read. Always name your operations (e.g. "query ListProducts { ... }"). Show results in readable Markdown tables or lists.
+- Always include the full \`id\` (GID) for every item in any listing — products, orders, customers, collections, variants, locations, etc. Display it in the table/list so it stays in conversation history and can be referenced directly in follow-up requests without re-querying.
 - Store data mutations: ALWAYS describe exactly what you are about to change and ask the merchant to confirm BEFORE calling shopify_graphql_mutation. Never run delete, cancel, refund, or bulk-update mutations without explicit merchant approval.
 - Keep explanations concise and practical.
 
