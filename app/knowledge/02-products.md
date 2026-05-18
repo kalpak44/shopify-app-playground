@@ -74,6 +74,9 @@
 - Reorder product options and option values: `productOptionsReorder(productId: ID!, options: [OptionReorderInput!]!)` — the order of options in the input array sets their new positions (`option1`, `option2`, …). Each entry identifies the option by `id` or `name`; include `values: [{ name }]` to also reorder that option's values. Omit `values` for an option to keep its current value order. Variant order is recalculated from the new option/value positions. ⚠️ If `values` is provided, ALL existing values for that option must be included — any missing value returns `MISSING_OPTION_VALUE` userError.
 - Reorder product media: `productReorderMedia(id: ID!, moves: [MoveInput!]!)` — async; returns `job { id }`. Each `MoveInput` is `{ id: "gid://shopify/MediaImage/...", newPosition: "N" }` (zero-based string). Only include media items that need repositioning — unchanged items maintain their relative order automatically. Poll with `job(id) { done }`. Check `mediaUserErrors` (not `userErrors`) for errors.
 - Add variants to an existing product: `productVariantsBulkCreate(productId, variants: [{ price, compareAtPrice, optionValues: [{ name, optionId }] }])`
+⚠️ **Removed/nonexistent variant fields — never use these:**
+- `ProductVariant.inventoryManagement` — removed in API 2026-04. To check if tracking is enabled use `inventoryItem { tracked }` (boolean). To control oversell behavior use `inventoryPolicy` (`DENY` or `CONTINUE`).
+
 - Update variant price/compareAtPrice: ⚠️ `productVariantUpdate` does NOT exist — always use `productVariantsBulkUpdate`:
   ```graphql
   mutation UpdateVariantPrices($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
