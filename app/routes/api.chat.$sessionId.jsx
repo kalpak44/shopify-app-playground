@@ -8,6 +8,7 @@ const NO_CONFIG_MSG =
   "No AI provider configured. Please go to **Settings** and add your API token.";
 
 const TOOL_STATUS = {
+  get_current_datetime: "Checking current date…",
   get_active_theme: "Checking active theme…",
   list_theme_files: "Listing theme files…",
   read_theme_file: "Reading theme file…",
@@ -72,6 +73,15 @@ export const action = async ({ request, params }) => {
 
       const executeTool = async (name, args) => {
         console.log(`[chat/${sessionId}] tool →`, name, JSON.stringify(args).slice(0, 120));
+        if (name === "get_current_datetime") {
+          const now = new Date();
+          return {
+            iso: now.toISOString(),
+            utcOffset: 0,
+            readable: now.toUTCString(),
+          };
+        }
+
         if (name === "get_active_theme") {
           const theme = await getTheme();
           return { id: theme.id, name: theme.name };

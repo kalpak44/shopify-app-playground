@@ -32,6 +32,12 @@ Rules:
 
 const TOOL_DEFS = [
   {
+    name: "get_current_datetime",
+    description:
+      "Get the current date and time on the server. Call this whenever the merchant's question involves relative time — 'today', 'this week', 'yesterday', 'last month', etc. — so you can construct accurate date-range filters in GraphQL queries.",
+    parameters: { type: "object", properties: {}, required: [] },
+  },
+  {
     name: "get_active_theme",
     description: "Get the name and ID of the merchant's currently active Shopify theme.",
     parameters: { type: "object", properties: {}, required: [] },
