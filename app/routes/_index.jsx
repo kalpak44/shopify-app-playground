@@ -12,9 +12,9 @@ export const loader = async ({ request }) => {
     const { session } = await authenticate.admin(request);
     const sessions = await prisma.chatSession.findMany({
       where: { shop: session.shop },
-      orderBy: { createdAt: "desc" },
+      orderBy: { updatedAt: "desc" },
       take: 50,
-      select: { id: true, title: true, createdAt: true },
+      select: { id: true, title: true, updatedAt: true },
     });
     return { apiKey: process.env.SHOPIFY_API_KEY || "", sessions };
   } catch (error) {
@@ -32,13 +32,6 @@ export const action = async ({ request }) => {
   const shop = session.shop;
   const formData = await request.formData();
   const intent = formData.get("intent");
-
-  if (intent === "new_session") {
-    const created = await prisma.chatSession.create({
-      data: { shop, title: "New session", status: "open" },
-    });
-    throw redirect(`/assistant/${created.id}`);
-  }
 
   if (intent === "delete_session") {
     const sessionId = formData.get("sessionId")?.toString();
@@ -80,34 +73,34 @@ export default function Index() {
                 padding: "8px 14px",
                 fontSize: "14px",
                 fontWeight: 500,
-                color: "#202223",
-                background: "#fff",
-                border: "1px solid #c9cccf",
-                borderRadius: "6px",
+                color: "#303030",
+                background: "#f6f6f7",
+                border: "1px solid #e1e3e5",
+                borderRadius: "8px",
                 textDecoration: "none",
+                lineHeight: "20px",
+                display: "inline-block",
               }}
             >
               Settings
             </Link>
-            <Form method="post">
-              <input type="hidden" name="intent" value="new_session" />
-              <button
-                type="submit"
-                style={{
-                  padding: "8px 14px",
-                  fontSize: "14px",
-                  fontWeight: 600,
-                  color: "#fff",
-                  background: "#008060",
-                  border: "1px solid #006e52",
-                  borderRadius: "6px",
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                }}
-              >
-                New session
-              </button>
-            </Form>
+            <Link
+              to="/assistant/new"
+              style={{
+                padding: "8px 14px",
+                fontSize: "14px",
+                fontWeight: 600,
+                color: "#fff",
+                background: "#303030",
+                border: "1px solid #303030",
+                borderRadius: "8px",
+                lineHeight: "20px",
+                textDecoration: "none",
+                display: "inline-block",
+              }}
+            >
+              New session
+            </Link>
           </div>
         </div>
 
@@ -211,7 +204,7 @@ export default function Index() {
                         {s.title || "Untitled session"}
                       </span>
                       <span style={{ fontSize: "13px", color: "#8c9196", whiteSpace: "nowrap" }}>
-                        {new Date(s.createdAt).toLocaleDateString()}
+                        {new Date(s.updatedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
                       </span>
                     </Link>
                     <button

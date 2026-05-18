@@ -1,6 +1,6 @@
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { runAgentLoop } from "../ai.server";
+import { runAgentLoop, generateSessionTitle } from "../ai.server";
 import { getMainTheme, readThemeFile, listThemeFiles, shopifyGraphql } from "../theme.server";
 import { generateUnifiedDiff } from "../diff.server";
 
@@ -17,29 +17,22 @@ const TOOL_STATUS = {
   shopify_graphql_mutation: "Applying change…",
 };
 
-export const action = async ({ request, params }) => {
+export const action = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
   const { accessToken } = session;
-  const { sessionId } = params;
 
-  console.log(`[chat/${sessionId}] session resolved — shop: ${shop}, hasToken: ${!!accessToken}, scope: ${session.scope}`);
-
-  if (!shop || !accessToken) {
-    console.error(`[chat/${sessionId}] session missing shop or accessToken — aborting`);
-    return new Response("Unauthorized", { status: 401 });
-  }
-
-  const chatSession = await prisma.chatSession.findFirst({
-    where: { id: sessionId, shop },
-  });
-  if (!chatSession) return new Response("Not found", { status: 404 });
+  if (!shop || !accessToken) return new Response("Unauthorized", { status: 401 });
 
   const formData = await request.formData();
   const content = (formData.get("message") ?? "").toString().trim();
   if (!content) return new Response("Bad request", { status: 400 });
 
-  // Persist user message first so it appears in the history sent to the AI
+  const chatSession = await prisma.chatSession.create({
+    data: { shop, title: "New session", status: "open" },
+  });
+  const sessionId = chatSession.id;
+
   await prisma.chatMessage.create({
     data: { sessionId, role: "user", content },
   });
@@ -61,10 +54,11 @@ export const action = async ({ request, params }) => {
       const send = (evt) =>
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(evt)}\n\n`));
 
+      send({ type: "created", sessionId });
+
       let fullText = "";
       let createdProposalId = null;
 
-      // Cache theme lookup to avoid redundant Shopify API calls per request
       let cachedTheme = null;
       const getTheme = async () => {
         if (!cachedTheme) cachedTheme = await getMainTheme(shop, accessToken);
@@ -72,77 +66,43 @@ export const action = async ({ request, params }) => {
       };
 
       const executeTool = async (name, args) => {
-        console.log(`[chat/${sessionId}] tool →`, name, JSON.stringify(args).slice(0, 120));
         if (name === "get_current_datetime") {
           const now = new Date();
-          return {
-            iso: now.toISOString(),
-            utcOffset: 0,
-            readable: now.toUTCString(),
-          };
+          return { iso: now.toISOString(), utcOffset: 0, readable: now.toUTCString() };
         }
-
         if (name === "get_active_theme") {
           const theme = await getTheme();
           return { id: theme.id, name: theme.name };
         }
-
         if (name === "list_theme_files") {
           const theme = await getTheme();
-          const files = await listThemeFiles(shop, accessToken, theme.id, args.prefix ?? null);
-          return files;
+          return listThemeFiles(shop, accessToken, theme.id, args.prefix ?? null);
         }
-
         if (name === "read_theme_file") {
           const theme = await getTheme();
-          const fileContent = await readThemeFile(shop, accessToken, theme.id, args.path);
-          return fileContent ?? `File not found: ${args.path}`;
+          return (await readThemeFile(shop, accessToken, theme.id, args.path)) ?? `File not found: ${args.path}`;
         }
-
         if (name === "propose_file_change") {
           const theme = await getTheme();
           const before = (await readThemeFile(shop, accessToken, theme.id, args.path)) ?? "";
           const diff = generateUnifiedDiff(before, args.new_content, args.path);
-
           const proposal = await prisma.changeProposal.create({
-            data: {
-              sessionId,
-              shop,
-              themeId: theme.id,
-              status: "pending",
-              summary: args.summary,
-              files: [{ path: args.path, before, after: args.new_content, diff }],
-            },
+            data: { sessionId, shop, themeId: theme.id, status: "pending", summary: args.summary, files: [{ path: args.path, before, after: args.new_content, diff }] },
           });
-
           createdProposalId = proposal.id;
-
-          // Push the inline proposal card to the client immediately
-          send({
-            type: "proposal",
-            proposalId: proposal.id,
-            summary: args.summary,
-            files: [{ path: args.path, diff }],
-          });
-
-          return {
-            success: true,
-            message: "Proposal created and shown to the merchant for review.",
-          };
+          send({ type: "proposal", proposalId: proposal.id, summary: args.summary, files: [{ path: args.path, diff }] });
+          return { success: true, message: "Proposal created and shown to the merchant for review." };
         }
-
         if (name === "shopify_graphql_query") {
           const { data, errors } = await shopifyGraphql(shop, accessToken, args.query, args.variables ?? {});
           if (errors?.length) return { error: errors.map((e) => e.message).join(", ") };
           return data;
         }
-
         if (name === "shopify_graphql_mutation") {
           const { data, errors } = await shopifyGraphql(shop, accessToken, args.mutation, args.variables ?? {});
           if (errors?.length) return { error: errors.map((e) => e.message).join(", ") };
           return data;
         }
-
         return { error: `Unknown tool: ${name}` };
       };
 
@@ -171,15 +131,19 @@ export const action = async ({ request, params }) => {
         }
       }
 
-      await Promise.all([
-        prisma.chatMessage.create({
-          data: { sessionId, role: "assistant", content: fullText, proposalId: createdProposalId },
-        }),
-        prisma.chatSession.update({
-          where: { id: sessionId },
-          data: { updatedAt: new Date() },
-        }),
-      ]);
+      await prisma.chatMessage.create({
+        data: { sessionId, role: "assistant", content: fullText, proposalId: createdProposalId },
+      });
+
+      // Generate a short title from the first exchange
+      let title = "New session";
+      if (config?.apiToken) {
+        title = (await generateSessionTitle(config, content, fullText)) ?? title;
+      }
+      await prisma.chatSession.update({
+        where: { id: sessionId },
+        data: { title },
+      });
 
       send({ type: "done" });
       controller.close();

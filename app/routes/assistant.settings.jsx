@@ -208,14 +208,16 @@ export default function AssistantSettings() {
                 type="submit"
                 disabled={isSaving}
                 style={{
-                  padding: "10px 24px",
-                  background: isSaving ? "#95c4b8" : "#008060",
+                  padding: "8px 20px",
+                  background: isSaving ? "#6b6b6b" : "#303030",
                   color: "#fff",
-                  border: "none",
+                  border: isSaving ? "1px solid #6b6b6b" : "1px solid #303030",
                   borderRadius: "8px",
                   fontWeight: 600,
                   fontSize: "14px",
+                  lineHeight: "20px",
                   cursor: isSaving ? "not-allowed" : "pointer",
+                  fontFamily: "inherit",
                 }}
               >
                 {isSaving ? "Saving…" : "Save"}
@@ -223,13 +225,14 @@ export default function AssistantSettings() {
               <Link
                 to="/"
                 style={{
-                  padding: "10px 20px",
-                  background: "#fff",
-                  color: "#202223",
-                  border: "1px solid #c9cccf",
+                  padding: "8px 20px",
+                  background: "#f6f6f7",
+                  color: "#303030",
+                  border: "1px solid #e1e3e5",
                   borderRadius: "8px",
                   fontWeight: 500,
                   fontSize: "14px",
+                  lineHeight: "20px",
                   textDecoration: "none",
                   display: "inline-flex",
                   alignItems: "center",

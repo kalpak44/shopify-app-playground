@@ -478,6 +478,59 @@ async function runAnthropicAgentLoop({
   return msg;
 }
 
+// ─── Session title generator ─────────────────────────────────────────────────
+
+export async function generateSessionTitle(config, userMessage, aiResponse) {
+  const baseUrl = config.baseUrl ?? "https://api.openai.com/v1";
+  const modelName = config.modelName ?? "gpt-4o";
+  const userSnippet = userMessage.slice(0, 300);
+  const aiSnippet = aiResponse.slice(0, 300);
+  const prompt = `User: ${userSnippet}\nAssistant: ${aiSnippet}`;
+
+  try {
+    if (config.provider === "anthropic") {
+      const resp = await fetch(`${baseUrl}/v1/messages`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": config.apiToken,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: modelName,
+          system: "Reply with ONLY a 2-3 word title in title case. No punctuation, no quotes, no explanation.",
+          messages: [{ role: "user", content: prompt }],
+          max_tokens: 16,
+        }),
+      });
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      return data.content?.[0]?.text?.trim().slice(0, 50) ?? null;
+    }
+
+    const resp = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${config.apiToken}`,
+      },
+      body: JSON.stringify({
+        model: modelName,
+        messages: [
+          { role: "system", content: "Reply with ONLY a 2-3 word title in title case. No punctuation, no quotes, no explanation." },
+          { role: "user", content: prompt },
+        ],
+        max_tokens: 16,
+      }),
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    return data.choices?.[0]?.message?.content?.trim().slice(0, 50) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 export async function runAgentLoop({
